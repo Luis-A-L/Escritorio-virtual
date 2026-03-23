@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "luisgustavoarrudalanconi@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidUser() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
+             data.role in ['admin', 'user'];
+    }
+
+    function isValidEmployee() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['id', 'name', 'team', 'education', 'status', 'level', 'homeOfficeUsedThisMonth', 'mood', 'avatar', 'deskPosition']) &&
+             data.id is number &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.team is string && data.team.size() > 0 && data.team.size() <= 100 &&
+             data.education is string &&
+             data.status in ['on-site', 'remote', 'absent'] &&
+             data.level is number && data.level >= 0 && data.level <= 3 &&
+             data.homeOfficeUsedThisMonth is number && data.homeOfficeUsedThisMonth >= 0 &&
+             data.mood in ['focused', 'happy', 'tired', 'blocked'] &&
+             data.avatar is string && data.avatar.size() > 0 && data.avatar.size() <= 50 &&
+             data.deskPosition is map && data.deskPosition.keys().hasAll(['row', 'col']) &&
+             data.deskPosition.row is number && data.deskPosition.col is number;
+    }
+
+    function isOnlyUpdatingSkinAndDesk() {
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return affectedKeys.hasOnly(['gender', 'avatar', 'customImageUrl', 'deskStyle', 'monitorStyle', 'mouseStyle']);
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser() && (request.resource.data.role == 'user' || isAdmin());
+      allow update: if isOwner(userId) && isValidUser() && request.resource.data.uid == resource.data.uid && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /employees/{employeeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidEmployee();
+      allow update: if isAuthenticated() && isValidEmployee() && (
+        isAdmin() || 
+        (resource.data.linkedUserId == request.auth.uid && isOnlyUpdatingSkinAndDesk() && request.resource.data.linkedUserId == resource.data.linkedUserId)
+      );
+      allow delete: if isAdmin();
+    }
+  }
+}

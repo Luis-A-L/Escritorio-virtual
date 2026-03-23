@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user in the virtual office.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "Represents an employee character at a desk.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "team": { "type": "string" },
+        "education": { "type": "string" },
+        "status": { "type": "string" },
+        "level": { "type": "number" },
+        "errors": { "type": "array" },
+        "homeOfficeUsedThisMonth": { "type": "number" },
+        "mood": { "type": "string" },
+        "gender": { "type": "string" },
+        "avatar": { "type": "string" },
+        "customImageUrl": { "type": "string" },
+        "deskPosition": { "type": "object" },
+        "deskStyle": { "type": "string" },
+        "monitorStyle": { "type": "string" },
+        "mouseStyle": { "type": "string" },
+        "linkedUserId": { "type": "string" }
+      },
+      "required": ["id", "name", "team", "education", "status", "level", "homeOfficeUsedThisMonth", "mood", "avatar", "deskPosition"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles and roles."
+    },
+    "/employees/{employeeId}": {
+      "schema": { "$ref": "#/entities/Employee" },
+      "description": "Stores employee characters and their desk states."
+    }
+  }
+}

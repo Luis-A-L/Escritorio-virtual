@@ -1,0 +1,116 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-mono: "Press Start 2P", monospace;
+}
+
+body {
+  font-family: "Press Start 2P", monospace;
+  background-color: #1a1a2e;
+  color: #ffffff;
+  margin: 0;
+  overflow: auto;
+  user-select: none;
+}
+
+.bg-checkerboard {
+  background-color: #b7aea4;
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,0.17), rgba(255,255,255,0) 34%, rgba(0,0,0,0.08) 100%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,0.04) 0 1px,
+      rgba(84, 66, 54, 0.05) 1px 2px,
+      transparent 2px 92px,
+      rgba(86, 68, 56, 0.18) 92px 94px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      #b7aea3 0 160px,
+      #b1a89d 160px 320px,
+      #c0b8ae 320px 480px,
+      #aca397 480px 640px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 158px,
+      rgba(88, 70, 57, 0.16) 158px 160px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 158px,
+      rgba(88, 70, 57, 0.14) 158px 160px
+    );
+  background-size: auto, auto, 640px 188px, 320px 188px, 320px 188px;
+  background-position: center, center, center, 0 0, 80px 94px;
+}
+
+.bg-room-blue {
+  background-color: #8fa1d1;
+  background-image: linear-gradient(45deg, #7a8ec2 25%, transparent 25%, transparent 75%, #7a8ec2 75%, #7a8ec2),
+    linear-gradient(45deg, #7a8ec2 25%, transparent 25%, transparent 75%, #7a8ec2 75%, #7a8ec2);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+}
+
+.bg-room-grey {
+  background-color: #9ca3af;
+  background-image: linear-gradient(45deg, #8b929e 25%, transparent 25%, transparent 75%, #8b929e 75%, #8b929e),
+    linear-gradient(45deg, #8b929e 25%, transparent 25%, transparent 75%, #8b929e 75%, #8b929e);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+}
+
+.bg-room-white {
+  background-color: #f3f4f6;
+  background-image: linear-gradient(45deg, #e5e7eb 25%, transparent 25%, transparent 75%, #e5e7eb 75%, #e5e7eb),
+    linear-gradient(45deg, #e5e7eb 25%, transparent 25%, transparent 75%, #e5e7eb 75%, #e5e7eb);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+}
+
+@keyframes idleBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.animate-idle {
+  animation: idleBounce 0.8s steps(2, end) infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.animate-blink {
+  animation: blink 1s infinite;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(100vw); }
+  100% { transform: translateX(-100%); }
+}
+.animate-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 20s linear infinite;
+}
+
+@keyframes floatUp {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-30px); opacity: 0; }
+}
+.animate-float-up {
+  animation: floatUp 1s ease-out forwards;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(33, 24, 20, 0.55);
+}
+::-webkit-scrollbar-thumb {
+  background: #5e4b3e;
+  border-radius: 999px;
+}
