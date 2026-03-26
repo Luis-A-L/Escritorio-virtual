@@ -542,17 +542,40 @@ export default function App() {
     // addEvent(`⭐ Nível de ${emp.name} alterado para ${newLevel}`);
   };
 
-  const changeEmployeeDesk = (emp: Employee, newSeatNumber: number) => {
+  const changeEmployeeDesk = async (emp: Employee, newSeatNumber: number) => {
     // Mesa 22 é exclusiva do chefe
     if (newSeatNumber === 22) {
       alert("A mesa 22 é exclusiva do chefe e não pode ser ocupada por outros membros!");
       return;
     }
 
+    const oldSeatNumber = getSeatNumber(emp);
     const occupant = employees.find(e => e.id !== emp.id && getSeatNumber(e) === newSeatNumber);
+    
+    // Swap Peripheral Styles
+    const oldDesk = deskSlots.find(d => d.seatNumber === oldSeatNumber);
+    const newDesk = deskSlots.find(d => d.seatNumber === newSeatNumber);
+    if (oldDesk && newDesk) {
+      const peripheralProps = ['deskStyle', 'deskColor', 'monitorStyle', 'monitorColor', 'mouseStyle', 'mouseColor', 'keyboardStyle', 'keyboardColor'] as const;
+      const updatedOldDesk = { ...oldDesk };
+      const updatedNewDesk = { ...newDesk };
+      
+      peripheralProps.forEach(prop => {
+        updatedOldDesk[prop] = newDesk[prop] as any;
+        updatedNewDesk[prop] = oldDesk[prop] as any;
+      });
+      
+      setDeskSlots(prev => prev.map(d => 
+        d.seatNumber === updatedOldDesk.seatNumber ? updatedOldDesk : 
+        d.seatNumber === updatedNewDesk.seatNumber ? updatedNewDesk : d
+      ));
+      
+      const { error } = await supabase.from('desk_slots').upsert([updatedOldDesk, updatedNewDesk]);
+      if (error) console.error("Error updating desk slots", error);
+    }
+
     if (occupant) {
       // Automatic Swap
-      const oldSeatNumber = getSeatNumber(emp);
       updateEmployees([
         { ...emp, deskPosition: getDeskPositionFromSeatNumber(newSeatNumber) },
         { ...occupant, deskPosition: getDeskPositionFromSeatNumber(oldSeatNumber) }
@@ -828,6 +851,7 @@ export default function App() {
                           employee={employee}
                           selectedItems={isLayoutEditMode ? selectedLayoutItems : []}
                           renderMode="peripherals"
+                          onClick={handleClick}
                         />
                       </div>
                     </div>
@@ -961,14 +985,28 @@ export default function App() {
                   <select 
                     className="bg-black border border-gray-600 p-1 text-white text-xs outline-none focus:border-[#00ff88]"
                     value={getSeatNumber(selectedEmployee)}
-                    onChange={(e) => changeEmployeeDesk(selectedEmployee, parseInt(e.target.value, 10))}
+                    onChange={(e) => {
+                      const newSeat = parseInt(e.target.value, 10);
+                      const occupant = employeesBySeat.get(newSeat);
+                      
+                      setConfirmDialog({
+                        title: occupant && occupant.id !== selectedEmployee.id ? "CONFIRMAR TROCA" : "CONFIRMAR MUDANÇA",
+                        message: occupant && occupant.id !== selectedEmployee.id 
+                          ? `Deseja trocar ${selectedEmployee.name} de lugar com ${occupant.name} na Mesa ${newSeat}?`
+                          : `Deseja mover ${selectedEmployee.name} para a Mesa ${newSeat}?`,
+                        onConfirm: () => {
+                          changeEmployeeDesk(selectedEmployee, newSeat);
+                          setConfirmDialog(null);
+                        }
+                      });
+                    }}
                   >
                     {deskSlots.filter(s => !s.isBoss).map(slot => {
                       const occupant = employeesBySeat.get(slot.seatNumber);
                       const isOccupiedByOther = occupant && occupant.id !== selectedEmployee.id;
                       return (
-                        <option key={slot.seatNumber} value={slot.seatNumber} disabled={isOccupiedByOther}>
-                          Mesa {slot.seatNumber} {isOccupiedByOther ? `(${occupant.name})` : ''}
+                        <option key={slot.seatNumber} value={slot.seatNumber}>
+                          Mesa {slot.seatNumber} {isOccupiedByOther ? `(Trocar com ${occupant.name})` : ''}
                         </option>
                       );
                     })}
