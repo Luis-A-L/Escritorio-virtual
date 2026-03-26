@@ -1,7 +1,8 @@
 import React from 'react';
 import Character from '../Character';
 import { Employee } from '../../types';
-import { DeskVariant, VARIANT_CHARACTER_STYLE } from './config';
+import { DeskVariant } from '../../types';
+import { VARIANT_CHARACTER_STYLE } from './config';
 
 interface DeskOccupantProps {
   employee: Employee;

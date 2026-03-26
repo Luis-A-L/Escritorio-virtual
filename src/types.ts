@@ -1,6 +1,6 @@
 export type Team = 'Triagem Cível' | 'Triagem Crime' | 'Retorno Crime' | 'Retorno Cível' | 'Controle' | 'I.A.';
 export type EducationLevel = 'Ensino Médio' | 'Graduação' | 'Pós-graduação';
-export type Status = 'on-site' | 'remote' | 'absent';
+export type Status = 'on-site' | 'remote' | 'absent' | 'vacation';
 export type Mood = 'focused' | 'happy' | 'tired' | 'blocked';
 export type DeskVariant = 'corner-tl' | 'corner-tr' | 'corner-bl' | 'corner-br' | 'pillar' | 'boss';
 
@@ -42,23 +42,15 @@ export interface Employee {
   level: 0 | 1 | 2 | 3;
   errors: EmployeeError[];
   homeOfficeUsedThisMonth: number;
+  homeOfficeDates?: string[];
+  vacationStart?: string;
+  vacationEnd?: string;
   mood: Mood;
   gender?: Gender;
   avatar: string;
   customImageUrl?: string;
   deskPosition: { row: number; col: number };
-  deskStyle?: 'simple' | 'medium' | 'gamer';
-  monitorStyle?: 'simple' | 'medium' | 'gamer';
-  mouseStyle?: 'simple' | 'medium' | 'gamer';
-  keyboardStyle?: 'simple' | 'medium' | 'gamer';
-  deskColor?: string;
-  monitorColor?: string;
-  mouseColor?: string;
-  keyboardColor?: string;
   linkedUserId?: string;
-  monitorOffset?: PositionOffset;
-  mouseOffset?: PositionOffset;
-  keyboardOffset?: PositionOffset;
   characterOffset?: PositionOffset;
 }
 
@@ -82,6 +74,17 @@ export interface DeskSlot {
   variant: DeskVariant;
   isBoss?: boolean;
   rotation?: number;
+  deskStyle?: 'simple' | 'medium' | 'gamer';
+  monitorStyle?: 'simple' | 'medium' | 'gamer';
+  mouseStyle?: 'simple' | 'medium' | 'gamer';
+  keyboardStyle?: 'simple' | 'medium' | 'gamer';
+  deskColor?: string;
+  monitorColor?: string;
+  mouseColor?: string;
+  keyboardColor?: string;
+  monitorOffset?: PositionOffset;
+  mouseOffset?: PositionOffset;
+  keyboardOffset?: PositionOffset;
 }
 
 export const INITIAL_EMPLOYEES: Employee[] = [

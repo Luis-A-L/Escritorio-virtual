@@ -1,24 +1,29 @@
 import React from 'react';
-import { Employee } from '../../types';
-import { DeskVariant, VARIANT_MONITOR_STYLE, getMonitorTone } from './config';
+import { Employee, DeskSlot } from '../../types';
+import { DeskVariant } from '../../types';
+import { VARIANT_MONITOR_STYLE, getMonitorTone } from './config';
 
 interface DeskMonitorProps {
+  deskSlot: DeskSlot;
   employee?: Employee;
-  variant: DeskVariant;
-  isBoss?: boolean;
   isSelected?: boolean;
 }
 
-export default function DeskMonitor({ employee, variant, isBoss = false, isSelected = false }: DeskMonitorProps) {
+export default function DeskMonitor({ deskSlot, employee, isSelected = false }: DeskMonitorProps) {
+  const { variant, isBoss = false } = deskSlot;
   const monitorTone = getMonitorTone(employee, isBoss);
-  const isGamer = employee?.monitorStyle === 'gamer' && !isBoss;
-  const isMedium = employee?.monitorStyle === 'medium' && !isBoss;
+  const monitorOffset = deskSlot.monitorOffset || employee?.monitorOffset;
+  const monitorColor = deskSlot.monitorColor || employee?.monitorColor;
+  const monitorStyle = deskSlot.monitorStyle || employee?.monitorStyle;
+
+  const isGamer = monitorStyle === 'gamer' && !isBoss;
+  const isMedium = monitorStyle === 'medium' && !isBoss;
 
   const baseStyle = VARIANT_MONITOR_STYLE[variant];
   const combinedStyle = {
     ...baseStyle,
-    transform: employee?.monitorOffset 
-      ? `${baseStyle.transform || ''} translate(${employee.monitorOffset.x}px, ${employee.monitorOffset.y}px) rotate(${employee.monitorOffset.rotation || 0}deg)`
+    transform: monitorOffset 
+      ? `${baseStyle.transform || ''} translate(${monitorOffset.x}px, ${monitorOffset.y}px) rotate(${monitorOffset.rotation || 0}deg)`
       : baseStyle.transform
   };
 
@@ -33,7 +38,7 @@ export default function DeskMonitor({ employee, variant, isBoss = false, isSelec
         className={`border-2 p-1 shadow-md ${
           isGamer ? 'h-7 w-14 rounded-[999px]' : isMedium ? 'h-7 w-14 rounded-md' : 'h-8 w-11 rounded-sm'
         } ${monitorTone.shell}`}
-        style={{ backgroundColor: employee?.monitorColor || undefined }}
+        style={{ backgroundColor: monitorColor || undefined }}
       >
         <div className={`h-full w-full ${monitorTone.screen}`} />
       </div>

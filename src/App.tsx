@@ -3,8 +3,8 @@ import HUD from './components/HUD';
 import Desk from './components/Desk';
 import Modal from './components/Modal';
 import Character from './components/Character';
-import SprintBoard from './components/SprintBoard';
-import { Employee, Task, Status, Team, ErrorType, EducationLevel, Gender, UserProfile, PositionOffset, LayoutItemReference, DeskSlot } from './types';
+import DataDashboard from './components/DataDashboard';
+import { Employee, Status, Team, ErrorType, EducationLevel, Gender, UserProfile, PositionOffset, LayoutItemReference, DeskSlot } from './types';
 import { supabase } from './lib/supabase';
 
 const TEAMS: Team[] = ['Triagem Cível', 'Triagem Crime', 'Retorno Crime', 'Retorno Cível', 'Controle', 'I.A.'];
@@ -39,7 +39,7 @@ export default function App() {
   const [usersList, setUsersList] = useState<UserProfile[]>([{ uid: 'mock-user', name: 'Admin', email: 'admin@admin', role: 'admin' }]);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
 
-  const [tasks, setTasks] = useState<Task[]>([]);
+
 
   const [deskSlots, setDeskSlots] = useState<DeskSlot[]>([]);
 
@@ -58,6 +58,9 @@ export default function App() {
   const [layoutHistory, setLayoutHistory] = useState<LayoutState[]>([]);
   const stateRef = useRef({ deskSlots: [] as DeskSlot[], employees: [] as Employee[] });
   const dragStartedRef = useRef(false);
+
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [alignmentGuides, setAlignmentGuides] = useState<{type: 'h'|'v', pos: number}[]>([]);
 
   useEffect(() => {
     stateRef.current = { deskSlots, employees };
@@ -112,8 +115,8 @@ export default function App() {
 
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [clickedEmptySeat, setClickedEmptySeat] = useState<number | null>(null);
+  const [selectedDeskSlotToEdit, setSelectedDeskSlotToEdit] = useState<DeskSlot | null>(null);
   const [moveTargetSeat, setMoveTargetSeat] = useState<number | null>(null);
-  const [isSprintBoardOpen, setIsSprintBoardOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isEvaluationOpen, setIsEvaluationOpen] = useState(false);
@@ -122,15 +125,6 @@ export default function App() {
   const [newMemberGender, setNewMemberGender] = useState<Gender>('male');
   const [newMemberAvatar, setNewMemberAvatar] = useState<string>('m1');
   const [newMemberCustomImage, setNewMemberCustomImage] = useState<string | undefined>();
-  const [newMemberDeskStyle, setNewMemberDeskStyle] = useState<'simple' | 'medium' | 'gamer'>('simple');
-  const [newMemberMonitorStyle, setNewMemberMonitorStyle] = useState<'simple' | 'medium' | 'gamer'>('simple');
-  const [newMemberMouseStyle, setNewMemberMouseStyle] = useState<'simple' | 'medium' | 'gamer'>('simple');
-  const [newMemberKeyboardStyle, setNewMemberKeyboardStyle] = useState<'simple' | 'medium' | 'gamer'>('simple');
-  
-  const [newMemberDeskColor, setNewMemberDeskColor] = useState<string>('');
-  const [newMemberMonitorColor, setNewMemberMonitorColor] = useState<string>('');
-  const [newMemberMouseColor, setNewMemberMouseColor] = useState<string>('');
-  const [newMemberKeyboardColor, setNewMemberKeyboardColor] = useState<string>('');
 
   const [zoom, setZoom] = useState(1);
 
@@ -153,17 +147,19 @@ export default function App() {
   };
 
   const handleMouseLeave = () => setIsDragging(false);
-  const handleMouseUp = () => setIsDragging(false);
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || !scrollContainerRef.current) return;
-    e.preventDefault();
+    
     const x = e.pageX - scrollContainerRef.current.offsetLeft;
     const y = e.pageY - scrollContainerRef.current.offsetTop;
-    const walkX = (x - dragStart.x) * 1.5;
-    const walkY = (y - dragStart.y) * 1.5;
+    const walkX = (x - dragStart.x);
+    const walkY = (y - dragStart.y);
     
-    if (Math.abs(walkX) > 5 || Math.abs(walkY) > 5) {
+    if (Math.abs(walkX) > 2 || Math.abs(walkY) > 2) {
       setHasDragged(true);
     }
     
@@ -196,7 +192,7 @@ export default function App() {
         if (empErr) {
           console.error("ERRO EMPLOYEES:", empErr);
           // If 400, it's likely a schema mismatch. Let's try to be helpful.
-          if (empErr.code === 'PGRST204' || empErr.status === 400) {
+          if (empErr.code === 'PGRST204' || (empErr as any).status === 400) {
             console.warn("Possível erro de esquema ou tabela não encontrada.");
           }
         }
@@ -205,10 +201,6 @@ export default function App() {
         const { data: desks, error: deskErr } = await supabase.from('desk_slots').select('*');
         if (deskErr) console.error("ERRO DESKS:", deskErr);
         if (desks && desks.length > 0) setDeskSlots(desks);
-
-        const { data: tasksData, error: taskErr } = await supabase.from('tasks').select('*');
-        if (taskErr) console.error("ERRO TASKS:", taskErr);
-        if (tasksData && tasksData.length > 0) setTasks(tasksData);
       } catch (err) {
         console.error("Error loading data from Supabase:", err);
       }
@@ -250,36 +242,61 @@ export default function App() {
         const dx = (e.clientX - dragStartInfo.mouseX) / zoom;
         const dy = (e.clientY - dragStartInfo.mouseY) / zoom;
         
-        const snap = 10;
-        
+        const snap = 5;
+        const guides: {type: 'h'|'v', pos: number}[] = [];
+
         setDeskSlots(prev => {
           let updated = [...prev];
-          selectedLayoutItems.filter(i => i.type === 'desk').forEach(item => {
-             const startPos = dragStartPositions.get(`desk-${item.id}`);
-             if (startPos) {
-               const newX = Math.round((startPos.initialX + dx) / snap) * snap;
-               const newY = Math.round((startPos.initialY + dy) / snap) * snap;
-               updated = updated.map(d => d.seatNumber === item.id ? { ...d, left_pos: newX, top_pos: newY } : d);
-             }
+          selectedLayoutItems.forEach(item => {
+            const startPos = dragStartPositions.get(`${item.type}-${item.id}`);
+            if (startPos) {
+              const newX = startPos.initialX + dx;
+              const newY = startPos.initialY + dy;
+
+              if (item.type === 'desk') {
+                let finalX = newX;
+                let finalY = newY;
+                // Snapping for desks
+                updated.forEach(other => {
+                  if (other.seatNumber === item.id) return;
+                  if (Math.abs(newX - other.left_pos) < snap) {
+                    finalX = other.left_pos;
+                    guides.push({type: 'v', pos: other.left_pos});
+                  }
+                  if (Math.abs(newY - other.top_pos) < snap) {
+                    finalY = other.top_pos;
+                    guides.push({type: 'h', pos: other.top_pos});
+                  }
+                });
+                updated = updated.map(d => d.seatNumber === item.id ? { ...d, left_pos: finalX, top_pos: finalY } : d);
+              } else if (item.type !== 'character') {
+                // Peripherals: monitor, mouse, keyboard
+                const propName = `${item.type}Offset` as keyof DeskSlot;
+                updated = updated.map(d => {
+                  // Find the desk that contains this peripheral
+                  const occupant = stateRef.current.employees.find(e => e.id === item.id);
+                  if (d.seatNumber === (occupant ? getSeatNumber(occupant) : 0)) {
+                    const currentOffset = d[propName] as PositionOffset | undefined;
+                    return { ...d, [propName]: { ...(currentOffset || {}), x: newX, y: newY } };
+                  }
+                  return d;
+                });
+              }
+            }
           });
           return updated;
         });
 
+        setAlignmentGuides(guides);
+
         setEmployees(prev => {
           let updated = [...prev];
-          selectedLayoutItems.filter(i => i.type !== 'desk').forEach(item => {
-             const startPos = dragStartPositions.get(`${item.type}-${item.id}`);
+          selectedLayoutItems.filter(i => i.type === 'character').forEach(item => {
+             const startPos = dragStartPositions.get(`character-${item.id}`);
              if (startPos) {
-               const newX = Math.round((startPos.initialX + dx) / snap) * snap;
-               const newY = Math.round((startPos.initialY + dy) / snap) * snap;
-               updated = updated.map(emp => {
-                 if (emp.id === item.id) {
-                   const propName = `${item.type}Offset` as keyof Employee;
-                   const currentOffset = emp[propName] as PositionOffset | undefined;
-                   return { ...emp, [propName]: { ...(currentOffset || {}), x: newX, y: newY } };
-                 }
-                 return emp;
-               });
+               const newX = startPos.initialX + dx;
+               const newY = startPos.initialY + dy;
+               updated = updated.map(emp => emp.id === item.id ? { ...emp, characterOffset: { ...(emp.characterOffset || {}), x: newX, y: newY } } : emp);
              }
           });
           return updated;
@@ -288,6 +305,7 @@ export default function App() {
     };
 
     const handleGlobalMouseUp = async () => {
+      setAlignmentGuides([]);
       if (dragTarget !== null) {
         // Sync final position to Supabase for all selected items
         const desksToUpsert: DeskSlot[] = [];
@@ -296,10 +314,15 @@ export default function App() {
         for (const item of selectedLayoutItems) {
           if (item.type === 'desk') {
             const desk = stateRef.current.deskSlots.find(d => d.seatNumber === item.id);
-            if (desk) desksToUpsert.push(desk);
-          } else {
+            if (desk && !desksToUpsert.some(d => d.seatNumber === desk.seatNumber)) desksToUpsert.push(desk);
+          } else if (item.type === 'character') {
             const emp = stateRef.current.employees.find(e => e.id === item.id);
             if (emp && !empsToUpsert.some(e => e.id === emp.id)) empsToUpsert.push(emp);
+          } else {
+            // Peripheral was moved
+            const occupant = stateRef.current.employees.find(e => e.id === item.id);
+            const desk = stateRef.current.deskSlots.find(d => d.seatNumber === (occupant ? getSeatNumber(occupant) : 0));
+            if (desk && !desksToUpsert.some(d => d.seatNumber === desk.seatNumber)) desksToUpsert.push(desk);
           }
         }
 
@@ -368,9 +391,6 @@ export default function App() {
   const prepareEmployeeForSupabase = (emp: Employee) => {
     return {
       ...emp,
-      monitorOffset: emp.monitorOffset || { x: 0, y: 0, rotation: 0 },
-      mouseOffset: emp.mouseOffset || { x: 0, y: 0, rotation: 0 },
-      keyboardOffset: emp.keyboardOffset || { x: 0, y: 0, rotation: 0 },
       characterOffset: emp.characterOffset || { x: 0, y: 0, rotation: 0 },
       // Ensure deskPosition is also present
       deskPosition: emp.deskPosition || { row: 0, col: 0 }
@@ -379,13 +399,34 @@ export default function App() {
 
   const updateEmployee = async (updated: Employee) => {
     const toSave = prepareEmployeeForSupabase(updated);
-
     setEmployees(prev => prev.map(employee => employee.id === updated.id ? updated : employee));
     setSelectedEmployee(prev => prev?.id === updated.id ? updated : prev);
-
     const { error } = await supabase.from('employees').upsert(toSave);
     if (error) {
       console.error("Error updating employee", error);
+      alert(`Erro ao salvar no banco: ${error.message}`);
+    }
+  };
+
+  const updateEmployees = async (updates: Employee[]) => {
+    setEmployees(prev => prev.map(emp => {
+      const update = updates.find(u => u.id === emp.id);
+      return update ? update : emp;
+    }));
+    const toSave = updates.map(prepareEmployeeForSupabase);
+    const { error } = await supabase.from('employees').upsert(toSave);
+    if (error) {
+      console.error("Error updating employees", error);
+      alert(`Erro ao salvar no banco: ${error.message}`);
+    }
+  };
+
+  const updateDeskSlot = async (updated: DeskSlot) => {
+    setDeskSlots(prev => prev.map(d => d.seatNumber === updated.seatNumber ? updated : d));
+    setSelectedDeskSlotToEdit(prev => prev?.seatNumber === updated.seatNumber ? updated : prev);
+    const { error } = await supabase.from('desk_slots').upsert(updated);
+    if (error) {
+      console.error("Error updating desk slot", error);
       alert(`Erro ao salvar no banco: ${error.message}`);
     }
   };
@@ -413,31 +454,26 @@ export default function App() {
       default: return 0;
     }
   };
-
   const handleStatusChange = (emp: Employee, newStatus: Status) => {
-    if (newStatus === 'remote' || newStatus === 'absent') {
+    if (newStatus === 'remote' || newStatus === 'absent' || newStatus === 'vacation') {
       // Check if team has at least 1 other person on-site
       const teamOnSite = employees.filter(e => e.team === emp.team && e.status === 'on-site' && e.id !== emp.id);
-      if (teamOnSite.length === 0) {
+      if (teamOnSite.length === 0 && (newStatus === 'remote' || newStatus === 'absent' || newStatus === 'vacation')) {
         alert(`A equipe ${emp.team} não pode ficar sem nenhum membro presencial!`);
         return;
       }
 
       if (newStatus === 'remote') {
         const allowance = getHomeOfficeAllowance(emp.level);
-        const used = emp.homeOfficeUsedThisMonth || 0;
-        if (used >= allowance) {
+        const used = (emp.homeOfficeDates?.length || 0); // Use specific dates count
+        if (used >= allowance && !emp.homeOfficeDates?.includes(new Date().toLocaleDateString('pt-BR'))) {
           alert(`${emp.name} já atingiu o limite de Home Office deste mês (Nível ${emp.level}: ${allowance} dias).`);
           return;
         }
-        updateEmployee({ ...emp, status: newStatus, homeOfficeUsedThisMonth: used + 1 });
-        // addEvent(`🏠 ${emp.name} está de Home Office hoje.`);
-        return;
       }
     }
     
     updateEmployee({ ...emp, status: newStatus });
-    // addEvent(`🔄 ${emp.name} mudou status para ${newStatus.toUpperCase()}`);
   };
 
   const handleAddError = (emp: Employee, type: ErrorType) => {
@@ -465,8 +501,8 @@ export default function App() {
     const selectedSeatStr = formData.get('seatNumber') as string;
     const nextSeatNumber = selectedSeatStr ? parseInt(selectedSeatStr, 10) : undefined;
 
-    if (!nextSeatNumber) {
-      alert('Selecione uma mesa válida.');
+    if (!nextSeatNumber || nextSeatNumber === 22) {
+      alert(nextSeatNumber === 22 ? 'A mesa 22 é exclusiva do chefe.' : 'Selecione uma mesa válida.');
       return;
     }
 
@@ -483,15 +519,7 @@ export default function App() {
       gender: newMemberGender,
       avatar: newMemberAvatar,
       customImageUrl: newMemberCustomImage,
-      deskStyle: newMemberDeskStyle,
-      monitorStyle: newMemberMonitorStyle,
-      mouseStyle: newMemberMouseStyle,
-      keyboardStyle: newMemberKeyboardStyle,
-      keyboardColor: newMemberKeyboardColor || undefined,
       deskPosition: getDeskPositionFromSeatNumber(nextSeatNumber),
-      monitorOffset: { x: 0, y: 0, rotation: 0 },
-      mouseOffset: { x: 0, y: 0, rotation: 0 },
-      keyboardOffset: { x: 0, y: 0, rotation: 0 },
       characterOffset: { x: 0, y: 0, rotation: 0 }
     };
     setEmployees(prev => [...prev, newEmp]);
@@ -499,14 +527,6 @@ export default function App() {
     
     // Reset form states
     setNewMemberCustomImage(undefined);
-    setNewMemberDeskStyle('simple');
-    setNewMemberMonitorStyle('simple');
-    setNewMemberMouseStyle('simple');
-    setNewMemberKeyboardStyle('simple');
-    setNewMemberDeskColor('');
-    setNewMemberMonitorColor('');
-    setNewMemberMouseColor('');
-    setNewMemberKeyboardColor('');
     
     // Sync with Supabase
     const { error } = await supabase.from('employees').insert(prepareEmployeeForSupabase(newEmp));
@@ -514,25 +534,7 @@ export default function App() {
     // addEvent(`👋 ${newEmp.name} entrou para a equipe ${newEmp.team}!`);
   };
 
-  const handleTaskUpdate = async (updatedTask: Task) => {
-    setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-    
-    const { error } = await supabase.from('tasks').upsert(updatedTask);
-    if (error) console.error("Error updating task", error);
 
-    if (updatedTask.status === 'done') {
-      // addEvent(`🎉 Tarefa "${updatedTask.title}" concluída!`);
-    }
-  };
-
-  const handleAddTask = async (title: string) => {
-    const newTask: Task = { id: Date.now(), title, status: 'todo' };
-    setTasks(prev => [...prev, newTask]);
-    
-    const { error } = await supabase.from('tasks').insert(newTask);
-    if (error) console.error("Error adding task", error);
-    // addEvent(`📝 Nova tarefa adicionada: ${title}`);
-  };
 
   const handleLevelChange = (emp: Employee, delta: number) => {
     const newLevel = Math.max(0, Math.min(3, emp.level + delta)) as 0 | 1 | 2 | 3;
@@ -541,9 +543,20 @@ export default function App() {
   };
 
   const changeEmployeeDesk = (emp: Employee, newSeatNumber: number) => {
-    const isOccupied = employees.some(e => e.id !== emp.id && getSeatNumber(e) === newSeatNumber);
-    if (isOccupied) {
-      alert(`A mesa ${newSeatNumber} já está ocupada!`);
+    // Mesa 22 é exclusiva do chefe
+    if (newSeatNumber === 22) {
+      alert("A mesa 22 é exclusiva do chefe e não pode ser ocupada por outros membros!");
+      return;
+    }
+
+    const occupant = employees.find(e => e.id !== emp.id && getSeatNumber(e) === newSeatNumber);
+    if (occupant) {
+      // Automatic Swap
+      const oldSeatNumber = getSeatNumber(emp);
+      updateEmployees([
+        { ...emp, deskPosition: getDeskPositionFromSeatNumber(newSeatNumber) },
+        { ...occupant, deskPosition: getDeskPositionFromSeatNumber(oldSeatNumber) }
+      ]);
       return;
     }
     updateEmployee({ ...emp, deskPosition: getDeskPositionFromSeatNumber(newSeatNumber) });
@@ -604,7 +617,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-checkerboard font-mono text-white overflow-auto flex flex-col">
-      <HUD employees={employees} totalXP={0} />
+      <HUD 
+        employees={employees} 
+        totalXP={0} 
+        onZoomIn={() => setZoom(prev => Math.min(prev + 0.1, 2))}
+        onZoomOut={() => setZoom(prev => Math.max(prev - 0.1, 0.3))}
+        zoomLevel={zoom}
+      />
 
       <div 
         ref={scrollContainerRef}
@@ -647,19 +666,7 @@ export default function App() {
             )}
           </div>
 
-          <div onMouseDown={(e) => e.stopPropagation()} className="absolute top-24 right-8 z-20 flex flex-col gap-2 rounded border border-gray-700 bg-black/65 p-2 shadow-lg">
-            <div className="grid grid-cols-3 gap-1">
-              <button onClick={() => panViewport(0, -160)} className="col-start-2 border border-gray-600 px-2 py-1 text-xs hover:border-[#00ff88] hover:text-[#00ff88]">▲</button>
-              <button onClick={() => panViewport(-160, 0)} className="border border-gray-600 px-2 py-1 text-xs hover:border-[#00ff88] hover:text-[#00ff88]">◀</button>
-              <button onClick={() => panViewport(160, 0)} className="border border-gray-600 px-2 py-1 text-xs hover:border-[#00ff88] hover:text-[#00ff88]">▶</button>
-              <button onClick={() => panViewport(0, 160)} className="col-start-2 border border-gray-600 px-2 py-1 text-xs hover:border-[#00ff88] hover:text-[#00ff88]">▼</button>
-            </div>
-            <div className="flex items-center gap-1">
-              <button onClick={() => updateZoom(-0.1)} className="border border-gray-600 px-2 py-1 text-xs hover:border-[#00ff88] hover:text-[#00ff88]">-</button>
-              <button onClick={() => setZoom(1)} className="min-w-16 border border-gray-600 px-2 py-1 text-[10px] hover:border-[#00ff88] hover:text-[#00ff88]">{Math.round(zoom * 100)}%</button>
-              <button onClick={() => updateZoom(0.1)} className="border border-gray-600 px-2 py-1 text-xs hover:border-[#00ff88] hover:text-[#00ff88]">+</button>
-            </div>
-          </div>
+
 
           <div className="relative z-10 mx-auto mt-20" style={{ width: `${WORKSPACE_WIDTH * zoom}px`, height: `${WORKSPACE_HEIGHT * zoom}px` }}>
             <div className={`absolute left-0 top-0 origin-top-left ${isLayoutEditMode ? 'pointer-events-auto' : ''}`} style={{ width: `${WORKSPACE_WIDTH}px`, height: `${WORKSPACE_HEIGHT}px`, transform: `scale(${zoom})` }}>
@@ -685,19 +692,30 @@ export default function App() {
                       saveHistoryState();
                       setDeskSlots(prev => {
                         let updated = [...prev];
-                        selectedLayoutItems.filter(i => i.type === 'desk').forEach(item => {
-                           updated = updated.map(desk => desk.seatNumber === item.id ? { ...desk, rotation: ((desk.rotation || 0) + 90) % 360 } : desk);
+                        selectedLayoutItems.forEach(item => {
+                           if (item.type === 'desk') {
+                             updated = updated.map(desk => desk.seatNumber === item.id ? { ...desk, rotation: ((desk.rotation || 0) + 90) % 360 } : desk);
+                           } else if (item.type !== 'character') {
+                             const propName = `${item.type}Offset` as keyof DeskSlot;
+                             updated = updated.map(d => {
+                               const occupant = stateRef.current.employees.find(e => e.id === item.id);
+                               if (d.seatNumber === (occupant ? getSeatNumber(occupant) : 0)) {
+                                 const currentOffset = d[propName] as PositionOffset | undefined;
+                                 return { ...d, [propName]: { ...(currentOffset || {x: 0, y: 0}), rotation: ((currentOffset?.rotation || 0) + 90) % 360 } };
+                               }
+                               return d;
+                             });
+                           }
                         });
                         return updated;
                       });
                       setEmployees(prev => {
                         let updated = [...prev];
-                        selectedLayoutItems.filter(i => i.type !== 'desk').forEach(item => {
+                        selectedLayoutItems.filter(i => i.type === 'character').forEach(item => {
                            updated = updated.map(emp => {
                              if (emp.id === item.id) {
-                               const offsetProp = `${item.type}Offset` as keyof Employee;
-                               const currentOffset = emp[offsetProp] as PositionOffset | undefined;
-                               return { ...emp, [offsetProp]: { ...(currentOffset || {x: 0, y: 0}), rotation: ((currentOffset?.rotation || 0) + 90) % 360 } };
+                               const currentOffset = emp.characterOffset as PositionOffset | undefined;
+                               return { ...emp, characterOffset: { ...(currentOffset || {x: 0, y: 0}), rotation: ((currentOffset?.rotation || 0) + 90) % 360 } };
                              }
                              return emp;
                            });
@@ -737,10 +755,18 @@ export default function App() {
                       if (item.type === 'desk') {
                          const desk = deskSlots.find(d => d.seatNumber === item.id);
                          if (desk) positions.set(`desk-${item.id}`, { initialX: desk.left_pos, initialY: desk.top_pos });
-                      } else {
+                      } else if (item.type === 'character') {
                          const emp = employees.find(e => e.id === item.id);
                          if (emp) {
-                           const offset = emp[`${item.type}Offset` as keyof Employee] as PositionOffset | undefined;
+                           positions.set(`character-${item.id}`, { initialX: emp.characterOffset?.x || 0, initialY: emp.characterOffset?.y || 0 });
+                         }
+                      } else {
+                         // Peripherals
+                         const occupant = employees.find(e => e.id === item.id);
+                         const desk = deskSlots.find(d => d.seatNumber === (occupant ? getSeatNumber(occupant) : 0));
+                         if (desk) {
+                           const propName = `${item.type}Offset` as keyof DeskSlot;
+                           const offset = desk[propName] as PositionOffset | undefined;
                            positions.set(`${item.type}-${item.id}`, { initialX: offset?.x || 0, initialY: offset?.y || 0 });
                          }
                       }
@@ -754,10 +780,14 @@ export default function App() {
                   }
                 };
 
-                const handleClick = employee ? () => {
-                  if (!hasDragged && !isLayoutEditMode) setSelectedEmployee(employee);
-                } : () => {
-                  if (!hasDragged && !isLayoutEditMode) setClickedEmptySeat(slot.seatNumber);
+                const handleClick = () => {
+                  if (hasDragged) return;
+                  if (isLayoutEditMode) {
+                    setSelectedDeskSlotToEdit(slot);
+                    return;
+                  }
+                  if (employee) setSelectedEmployee(employee);
+                  else setClickedEmptySeat(slot.seatNumber);
                 };
 
                 return (
@@ -776,9 +806,7 @@ export default function App() {
                       )}
                       <div>
                         <Desk
-                          seatNumber={slot.seatNumber}
-                          variant={slot.variant}
-                          isBoss={slot.isBoss}
+                          deskSlot={slot}
                           employee={employee}
                           selectedItems={isLayoutEditMode ? selectedLayoutItems : []}
                           renderMode="surface"
@@ -796,9 +824,7 @@ export default function App() {
                     >
                       <div>
                         <Desk
-                          seatNumber={slot.seatNumber}
-                          variant={slot.variant}
-                          isBoss={slot.isBoss}
+                          deskSlot={slot}
                           employee={employee}
                           selectedItems={isLayoutEditMode ? selectedLayoutItems : []}
                           renderMode="peripherals"
@@ -808,6 +834,23 @@ export default function App() {
                   </React.Fragment>
                 );
               })}
+
+              {/* Alignment Guides Overlay */}
+              {isLayoutEditMode && alignmentGuides.map((guide, i) => (
+                <div 
+                  key={i} 
+                  className="absolute pointer-events-none z-[100] border-cyan-400/50"
+                  style={{
+                    left: guide.type === 'v' ? `${guide.pos}px` : 0,
+                    top: guide.type === 'h' ? `${guide.pos}px` : 0,
+                    width: guide.type === 'v' ? '1px' : '2000px',
+                    height: guide.type === 'h' ? '1px' : '2000px',
+                    borderLeftWidth: guide.type === 'v' ? '1px' : 0,
+                    borderTopWidth: guide.type === 'h' ? '1px' : 0,
+                    boxShadow: '0 0 4px rgba(34, 211, 238, 0.4)'
+                  }}
+                />
+              ))}
             </div>
           </div>
         </div>
@@ -837,15 +880,16 @@ export default function App() {
             + MEMBRO
           </button>
           
-          <button onClick={() => setIsSprintBoardOpen(true)} className="bg-black border border-[#f7c948] text-[#f7c948] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#f7c948] hover:text-black transition-colors">
-            📋 TAREFAS
-          </button>
+
           
           <button onClick={() => setIsEvaluationOpen(true)} className="bg-black border border-[#ff6b35] text-[#ff6b35] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#ff6b35] hover:text-white transition-colors">
             ⚖️ AVALIAÇÃO MENSAL
           </button>
           <button onClick={() => setIsStatsOpen(true)} className="bg-black border border-[#6c63ff] text-[#6c63ff] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#6c63ff] hover:text-white transition-colors">
             📊 STATUS
+          </button>
+          <button onClick={() => setIsDashboardOpen(true)} className="bg-black border border-cyan-400 text-cyan-400 px-2 py-1 text-[8px] md:text-[10px] hover:bg-cyan-400 hover:text-black transition-colors font-bold">
+            📋 LISTA (BETA)
           </button>
         </div>
       </div>
@@ -940,18 +984,104 @@ export default function App() {
             {userProfile?.role === 'admin' && (
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="bg-black p-2 border border-gray-700">
-                  <p className="text-gray-500 mb-2">STATUS DIÁRIO</p>
                   <div className="flex flex-col gap-2">
-                    {(['on-site', 'remote', 'absent'] as Status[]).map(status => (
+                    {(['on-site', 'remote', 'vacation', 'absent'] as Status[]).map(status => (
                       <button
                         key={status}
                         onClick={() => handleStatusChange(selectedEmployee, status)}
-                        className={`p-1 border ${selectedEmployee.status === status ? 'border-white bg-white/10' : 'border-gray-600 text-gray-500'}`}
+                        className={`p-2 border text-left flex items-center gap-2 transition-all ${
+                          selectedEmployee.status === status 
+                          ? 'border-cyan-400 bg-cyan-400/20 text-cyan-100 shadow-[0_0_10px_rgba(34,211,238,0.2)]' 
+                          : 'border-white/10 text-slate-500 hover:border-white/30 hover:bg-white/5'
+                        }`}
                       >
-                        {status.toUpperCase()}
+                        <span className={`h-1.5 w-1.5 rounded-full ${
+                          status === 'on-site' ? 'bg-emerald-400' : 
+                          status === 'remote' ? 'bg-sky-400' : 
+                          status === 'vacation' ? 'bg-amber-400' : 'bg-slate-400'
+                        }`} />
+                        {status.toUpperCase().replace('-', ' ')}
+                        {status === 'vacation' && ' 🏖️'}
                       </button>
                     ))}
                   </div>
+
+                  {selectedEmployee.status === 'remote' && (
+                    <div className="mt-4 p-3 bg-sky-950/20 border border-sky-400/20 rounded">
+                      <p className="text-sky-300 font-bold mb-2 flex items-center gap-2">
+                         <span>📅</span> RESERVAR DIAS (MÁX {getHomeOfficeAllowance(selectedEmployee.level)})
+                      </p>
+                      <div className="grid grid-cols-7 gap-1 text-[10px] mb-2 text-slate-500 text-center uppercase tracking-tighter">
+                         {['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i}>{d}</div>)}
+                      </div>
+                      <div className="grid grid-cols-7 gap-1">
+                        {Array.from({length: 31}, (_, i) => {
+                          const day = i + 1;
+                          const dateStr = `${day < 10 ? '0'+day : day}/03/2026`; // Mocking March 2026
+                          const isSelected = selectedEmployee.homeOfficeDates?.includes(dateStr);
+                          const othersOnDate = employees.filter(e => e.id !== selectedEmployee.id && e.homeOfficeDates?.includes(dateStr)).length;
+                          const isConflict = othersOnDate >= 2;
+
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                const current = selectedEmployee.homeOfficeDates || [];
+                                if (isSelected) {
+                                  updateEmployee({ ...selectedEmployee, homeOfficeDates: current.filter(d => d !== dateStr) });
+                                } else {
+                                  if (current.length >= getHomeOfficeAllowance(selectedEmployee.level)) {
+                                    alert("Limite de dias de Home Office atingido!");
+                                    return;
+                                  }
+                                  if (isConflict) {
+                                    if(!confirm(`Já existem ${othersOnDate} pessoas em HO neste dia. Deseja continuar?`)) return;
+                                  }
+                                  updateEmployee({ ...selectedEmployee, homeOfficeDates: [...current, dateStr] });
+                                }
+                              }}
+                              className={`aspect-square flex items-center justify-center rounded transition-all ${
+                                isSelected 
+                                ? 'bg-sky-400 text-black font-bold' 
+                                : isConflict 
+                                  ? 'bg-red-900/40 text-red-300 hover:bg-red-800/40' 
+                                  : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                              }`}
+                              title={isConflict ? `${othersOnDate} pessoas já reservaram` : ''}
+                            >
+                              {day}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedEmployee.status === 'vacation' && (
+                    <div className="mt-4 p-3 bg-amber-950/20 border border-amber-400/20 rounded flex flex-col gap-3">
+                      <p className="text-amber-300 font-bold flex items-center gap-2">
+                         <span>🏖️</span> PERÍODO DE FÉRIAS
+                      </p>
+                      <div>
+                        <label className="text-[10px] text-amber-300/60 uppercase block mb-1">Início</label>
+                        <input 
+                          type="date" 
+                          className="w-full bg-black/40 border border-amber-400/30 p-2 text-white outline-none focus:border-amber-400"
+                          value={selectedEmployee.vacationStart || ''}
+                          onChange={(e) => updateEmployee({ ...selectedEmployee, vacationStart: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-amber-300/60 uppercase block mb-1">Fim</label>
+                        <input 
+                          type="date" 
+                          className="w-full bg-black/40 border border-amber-400/30 p-2 text-white outline-none focus:border-amber-400"
+                          value={selectedEmployee.vacationEnd || ''}
+                          onChange={(e) => updateEmployee({ ...selectedEmployee, vacationEnd: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-black p-2 border border-gray-700 flex flex-col">
@@ -1046,91 +1176,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bg-black p-2 border border-gray-700 text-xs">
-                  <p className="text-gray-500 mb-2">PERSONALIZAR MESA</p>
-                  <div className="flex flex-col gap-3">
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-gray-500 text-[10px]">MESA</label>
-                        <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" title="Cor da Mesa"
-                          value={selectedEmployee.deskColor || '#ffffff'} 
-                          onChange={(e) => updateEmployee({ ...selectedEmployee, deskColor: e.target.value })} 
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        {['simple', 'medium', 'gamer'].map(style => (
-                          <button
-                            key={`edit-desk-${style}`}
-                            onClick={() => updateEmployee({ ...selectedEmployee, deskStyle: style as any })}
-                            className={`flex-1 py-1 border text-[10px] uppercase ${selectedEmployee.deskStyle === style || (!selectedEmployee.deskStyle && style === 'simple') ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}
-                          >
-                            {style === 'simple' ? 'Simples' : style === 'medium' ? 'Madeira' : 'Gamer'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-gray-500 text-[10px]">MONITOR</label>
-                        <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" title="Cor do Monitor"
-                          value={selectedEmployee.monitorColor || '#ffffff'} 
-                          onChange={(e) => updateEmployee({ ...selectedEmployee, monitorColor: e.target.value })} 
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        {['simple', 'medium', 'gamer'].map(style => (
-                          <button
-                            key={`edit-monitor-${style}`}
-                            onClick={() => updateEmployee({ ...selectedEmployee, monitorStyle: style as any })}
-                            className={`flex-1 py-1 border text-[10px] uppercase ${selectedEmployee.monitorStyle === style || (!selectedEmployee.monitorStyle && style === 'simple') ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}
-                          >
-                            {style === 'simple' ? 'Tubo' : style === 'medium' ? 'Plano' : 'Curvo'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-gray-500 text-[10px]">MOUSE</label>
-                        <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" title="Cor do Mouse"
-                          value={selectedEmployee.mouseColor || '#ffffff'} 
-                          onChange={(e) => updateEmployee({ ...selectedEmployee, mouseColor: e.target.value })} 
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        {['simple', 'medium', 'gamer'].map(style => (
-                          <button
-                            key={`edit-mouse-${style}`}
-                            onClick={() => updateEmployee({ ...selectedEmployee, mouseStyle: style as any })}
-                            className={`flex-1 py-1 border text-[10px] uppercase ${selectedEmployee.mouseStyle === style || (!selectedEmployee.mouseStyle && style === 'simple') ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}
-                          >
-                            {style === 'simple' ? 'Com Fio' : style === 'medium' ? 'Sem Fio' : 'RGB'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-gray-500 text-[10px]">TECLADO</label>
-                        <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" title="Cor do Teclado"
-                          value={selectedEmployee.keyboardColor || '#ffffff'} 
-                          onChange={(e) => updateEmployee({ ...selectedEmployee, keyboardColor: e.target.value })} 
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        {['simple', 'medium', 'gamer'].map(style => (
-                          <button
-                            key={`edit-keyboard-${style}`}
-                            onClick={() => updateEmployee({ ...selectedEmployee, keyboardStyle: style as any })}
-                            className={`flex-1 py-1 border text-[10px] uppercase ${selectedEmployee.keyboardStyle === style || (!selectedEmployee.keyboardStyle && style === 'simple') ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}
-                          >
-                            {style === 'simple' ? 'Com Fio' : style === 'medium' ? 'Sem Fio' : 'Mecânico'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+
 
                 <div className="mt-4 pt-4 border-t border-gray-800">
                   <button 
@@ -1178,9 +1224,9 @@ export default function App() {
             <label className="block text-gray-400 mb-1">MESA INICIAL</label>
             <select name="seatNumber" required defaultValue={clickedEmptySeat?.toString() || ""} className="w-full bg-black border border-gray-600 p-2 text-white focus:border-[#00ff88] outline-none">
               <option value="">Selecione uma mesa disponível...</option>
-              {deskSlots.filter(s => !s.isBoss).map(slot => {
-                const isOccupied = employeesBySeat.has(slot.seatNumber);
-                if (isOccupied) return null;
+              {deskSlots.map(slot => {
+                const isOccupied = employees.some(e => getSeatNumber(e) === slot.seatNumber);
+                if (isOccupied || slot.seatNumber === 22 || slot.isBoss) return null;
                 return (
                   <option key={slot.seatNumber} value={slot.seatNumber}>
                     Mesa {slot.seatNumber}
@@ -1253,95 +1299,6 @@ export default function App() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-gray-400 mb-1">PERSONALIZAÇÃO DA MESA</label>
-            <div className="bg-black p-3 border border-gray-600 flex flex-col gap-3">
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-gray-500 text-[10px]">MESA</label>
-                  <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" title="Cor da Mesa"
-                    value={newMemberDeskColor || '#ffffff'} 
-                    onChange={(e) => setNewMemberDeskColor(e.target.value)} 
-                  />
-                </div>
-                <div className="flex gap-2">
-                  {['simple', 'medium', 'gamer'].map(style => (
-                    <button
-                      key={`desk-${style}`}
-                      type="button"
-                      onClick={() => setNewMemberDeskStyle(style as any)}
-                      className={`flex-1 py-1 border text-[10px] uppercase ${newMemberDeskStyle === style ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}
-                    >
-                      {style === 'simple' ? 'Simples' : style === 'medium' ? 'Madeira' : 'Gamer'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-gray-500 text-[10px]">MONITOR</label>
-                  <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" title="Cor do Monitor"
-                    value={newMemberMonitorColor || '#ffffff'} 
-                    onChange={(e) => setNewMemberMonitorColor(e.target.value)} 
-                  />
-                </div>
-                <div className="flex gap-2">
-                  {['simple', 'medium', 'gamer'].map(style => (
-                    <button
-                      key={`monitor-${style}`}
-                      type="button"
-                      onClick={() => setNewMemberMonitorStyle(style as any)}
-                      className={`flex-1 py-1 border text-[10px] uppercase ${newMemberMonitorStyle === style ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}
-                    >
-                      {style === 'simple' ? 'Tubo' : style === 'medium' ? 'Plano' : 'Curvo'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-gray-500 text-[10px]">MOUSE</label>
-                  <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" title="Cor do Mouse"
-                    value={newMemberMouseColor || '#ffffff'} 
-                    onChange={(e) => setNewMemberMouseColor(e.target.value)} 
-                  />
-                </div>
-                <div className="flex gap-2">
-                  {['simple', 'medium', 'gamer'].map(style => (
-                    <button
-                      key={`mouse-${style}`}
-                      type="button"
-                      onClick={() => setNewMemberMouseStyle(style as any)}
-                      className={`flex-1 py-1 border text-[10px] uppercase ${newMemberMouseStyle === style ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}
-                    >
-                      {style === 'simple' ? 'Com Fio' : style === 'medium' ? 'Sem Fio' : 'RGB'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-gray-500 text-[10px]">TECLADO</label>
-                  <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" title="Cor do Teclado"
-                    value={newMemberKeyboardColor || '#ffffff'} 
-                    onChange={(e) => setNewMemberKeyboardColor(e.target.value)} 
-                  />
-                </div>
-                <div className="flex gap-2">
-                  {['simple', 'medium', 'gamer'].map(style => (
-                    <button
-                      key={`keyboard-${style}`}
-                      type="button"
-                      onClick={() => setNewMemberKeyboardStyle(style as any)}
-                      className={`flex-1 py-1 border text-[10px] uppercase ${newMemberKeyboardStyle === style ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}
-                    >
-                      {style === 'simple' ? 'Com Fio' : style === 'medium' ? 'Sem Fio' : 'Mecânico'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
 
           <button type="submit" className="mt-4 bg-[#00ff88] text-black py-3 hover:bg-white transition-colors">
             ADICIONAR
@@ -1392,13 +1349,7 @@ export default function App() {
         </div>
       </Modal>
 
-      <SprintBoard 
-        isOpen={isSprintBoardOpen} 
-        onClose={() => setIsSprintBoardOpen(false)} 
-        tasks={tasks}
-        onUpdateTask={handleTaskUpdate}
-        onAddTask={handleAddTask}
-      />
+
 
       {/* Boss Panel Modal */}
       <Modal isOpen={isBossPanelOpen} onClose={() => setIsBossPanelOpen(false)} title="PAINEL DO CHEFE">
@@ -1438,24 +1389,37 @@ export default function App() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="w-full max-w-sm border-2 border-[#00ff88] bg-[#1a1a2e] p-6 shadow-[0_0_30px_rgba(0,255,136,0.3)]">
             <div className="flex justify-between items-start mb-4">
-              <h2 className="text-xl font-bold text-white tracking-widest">MESA {clickedEmptySeat}</h2>
+              <h2 className="text-xl font-bold text-white tracking-widest uppercase">
+                MESA {clickedEmptySeat} {clickedEmptySeat === 22 && <span className="text-[#ff00ff] block text-[10px] mt-1">(RESERVADA: CHEFE)</span>}
+              </h2>
               <button onClick={() => setClickedEmptySeat(null)} className="text-gray-400 hover:text-white">✕</button>
             </div>
-            <p className="text-sm text-gray-400 mb-6">Esta mesa está livre. O que deseja fazer?</p>
-            <div className="flex flex-col gap-3">
+            <p className="text-sm text-gray-400 mb-6">Esta mesa está {clickedEmptySeat === 22 ? 'reservada para o cargo de Chefe.' : 'livre. O que deseja fazer?'}</p>
+            {clickedEmptySeat !== 22 && (
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => { setIsAddMemberOpen(true); }} 
+                  className="w-full bg-[#00ff88] py-2 text-black font-bold uppercase transition hover:bg-[#00cc6a]"
+                >
+                  Adicionar Novo Membro
+                </button>
+                <button 
+                  onClick={() => { setMoveTargetSeat(clickedEmptySeat); setClickedEmptySeat(null); }} 
+                  className="w-full border border-[#00ff88] py-2 text-[#00ff88] font-bold uppercase transition hover:bg-[#00ff88]/10"
+                >
+                  Mover Membro Existente
+                </button>
+              </div>
+            )}
+            {clickedEmptySeat === 22 && (
               <button 
-                onClick={() => { setIsAddMemberOpen(true); }} 
-                className="w-full bg-[#00ff88] py-2 text-black font-bold uppercase transition hover:bg-[#00cc6a]"
+                onClick={() => setClickedEmptySeat(null)} 
+                className="w-full bg-gray-700 py-2 text-gray-400 font-bold uppercase cursor-not-allowed"
+                disabled
               >
-                Adicionar Novo Membro
+                ACESSO RESTRITO
               </button>
-              <button 
-                onClick={() => { setMoveTargetSeat(clickedEmptySeat); setClickedEmptySeat(null); }} 
-                className="w-full border border-[#00ff88] py-2 text-[#00ff88] font-bold uppercase transition hover:bg-[#00ff88]/10"
-              >
-                Mover Membro Existente
-              </button>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -1506,6 +1470,119 @@ export default function App() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {selectedDeskSlotToEdit && (
+        <Modal isOpen={true} onClose={() => setSelectedDeskSlotToEdit(null)} title={`EDITAR MESA #${selectedDeskSlotToEdit.seatNumber}`}>
+          <div className="flex flex-col gap-6 text-xs">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <p className="text-[#00ff88] font-bold border-b border-[#00ff88]/30 pb-1">HARDWARE</p>
+                
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-gray-500 text-[10px]">MONITOR</label>
+                    <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" 
+                      value={selectedDeskSlotToEdit.monitorColor || '#ffffff'} 
+                      onChange={(e) => updateDeskSlot({ ...selectedDeskSlotToEdit, monitorColor: e.target.value })} 
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    {['simple', 'medium', 'gamer'].map(style => (
+                      <button key={style} onClick={() => updateDeskSlot({ ...selectedDeskSlotToEdit, monitorStyle: style as any })}
+                        className={`flex-1 py-1 border text-[9px] uppercase ${selectedDeskSlotToEdit.monitorStyle === style ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
+                      >
+                        {style === 'simple' ? 'Tubo' : style === 'medium' ? 'Plano' : 'Curvo'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-gray-500 text-[10px]">MOUSE</label>
+                    <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" 
+                      value={selectedDeskSlotToEdit.mouseColor || '#ffffff'} 
+                      onChange={(e) => updateDeskSlot({ ...selectedDeskSlotToEdit, mouseColor: e.target.value })} 
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    {['simple', 'medium', 'gamer'].map(style => (
+                      <button key={style} onClick={() => updateDeskSlot({ ...selectedDeskSlotToEdit, mouseStyle: style as any })}
+                        className={`flex-1 py-1 border text-[9px] uppercase ${selectedDeskSlotToEdit.mouseStyle === style ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
+                      >
+                        {style === 'simple' ? 'Fio' : style === 'medium' ? 'Sem Fio' : 'RGB'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-gray-500 text-[10px]">TECLADO</label>
+                    <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" 
+                      value={selectedDeskSlotToEdit.keyboardColor || '#ffffff'} 
+                      onChange={(e) => updateDeskSlot({ ...selectedDeskSlotToEdit, keyboardColor: e.target.value })} 
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    {['simple', 'medium', 'gamer'].map(style => (
+                      <button key={style} onClick={() => updateDeskSlot({ ...selectedDeskSlotToEdit, keyboardStyle: style as any })}
+                        className={`flex-1 py-1 border text-[9px] uppercase ${selectedDeskSlotToEdit.keyboardStyle === style ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
+                      >
+                        {style === 'simple' ? 'Fio' : style === 'medium' ? 'Sem Fio' : 'Mecânico'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-[#00ff88] font-bold border-b border-[#00ff88]/30 pb-1">ESTRUTURA</p>
+                
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-gray-500 text-[10px]">COR DA MESA</label>
+                    <input type="color" className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" 
+                      value={selectedDeskSlotToEdit.deskColor || '#ffffff'} 
+                      onChange={(e) => updateDeskSlot({ ...selectedDeskSlotToEdit, deskColor: e.target.value })} 
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    {['simple', 'medium', 'gamer'].map(style => (
+                      <button key={style} onClick={() => updateDeskSlot({ ...selectedDeskSlotToEdit, deskStyle: style as any })}
+                        className={`flex-1 py-1 border text-[9px] uppercase ${selectedDeskSlotToEdit.deskStyle === style ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
+                      >
+                        {style === 'simple' ? 'Simples' : style === 'medium' ? 'Madeira' : 'Gamer'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <p className="text-gray-500 text-[9px] italic">
+                    Configurações físicas da estação de trabalho. Arraste os itens no mapa para ajustar as posições.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setSelectedDeskSlotToEdit(null)}
+              className="mt-4 bg-[#00ff88] text-black font-bold py-3 hover:bg-white transition-colors uppercase tracking-widest"
+            >
+              CONCLUIR EDIÇÃO
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {isDashboardOpen && (
+        <DataDashboard 
+          isOpen={isDashboardOpen}
+          employees={employees} 
+          onClose={() => setIsDashboardOpen(false)} 
+        />
       )}
 
     </div>

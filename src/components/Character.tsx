@@ -47,16 +47,18 @@ export default function Character({ employee, size = 'md' }: CharacterProps) {
     lg: 'max-w-[112px]'
   };
 
-  // If absent, make them grayscale and transparent
-  const opacityClass = employee.status === 'absent' ? 'opacity-30 grayscale' : 'opacity-100';
-  const animationClass = employee.status !== 'absent' ? 'animate-idle' : '';
+  // If absent or vacation, make them grayscale and transparent
+  const opacityClass = employee.status === 'absent' || employee.status === 'vacation' ? 'opacity-30 grayscale' : 'opacity-100';
+  const animationClass = employee.status !== 'absent' && employee.status !== 'vacation' ? 'animate-idle' : '';
 
   if (employee.customImageUrl) {
     return (
       <div className={`relative flex flex-col items-center justify-end ${animationClass} ${opacityClass} ${containerHeight[size]} scale-105 origin-bottom`}>
-        {/* Remote Indicator */}
         {employee.status === 'remote' && (
           <div className="absolute -top-4 text-xs z-20" title="Home Office">🏠</div>
+        )}
+        {employee.status === 'vacation' && (
+          <div className="absolute -top-4 text-xs z-20" title="Férias">🏖️</div>
         )}
         <img 
           src={employee.customImageUrl} 
@@ -70,9 +72,11 @@ export default function Character({ employee, size = 'md' }: CharacterProps) {
 
   return (
     <div className={`relative flex flex-col items-center ${animationClass} ${opacityClass} scale-105 origin-bottom`}>
-      {/* Remote Indicator */}
       {employee.status === 'remote' && (
-        <div className="absolute -top-4 text-xs z-20" title="Home Office">🏠</div>
+        <div className="absolute -top-4 text-xs z-20 transition-transform" title="Home Office">🏠</div>
+      )}
+      {employee.status === 'vacation' && (
+        <div className="absolute -top-4 text-xs z-20 transition-transform" title="Férias">🏖️</div>
       )}
 
       {/* Head */}

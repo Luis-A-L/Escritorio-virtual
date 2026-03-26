@@ -1,20 +1,21 @@
 import React from 'react';
-import { Employee } from '../../types';
-import { DeskVariant, VARIANT_BADGE_POSITION, VARIANT_CLIP_PATH, getDeskTone } from './config';
+import { Employee, DeskSlot } from '../../types';
+import { DeskVariant } from '../../types';
+import { VARIANT_BADGE_POSITION, VARIANT_CLIP_PATH, getDeskTone } from './config';
 
 interface DeskSurfaceProps {
+  deskSlot: DeskSlot;
   employee?: Employee;
-  seatNumber: number;
-  variant: DeskVariant;
-  isBoss?: boolean;
 }
 
-export default function DeskSurface({ employee, seatNumber, variant, isBoss = false }: DeskSurfaceProps) {
+export default function DeskSurface({ deskSlot, employee }: DeskSurfaceProps) {
+  const { seatNumber, variant, isBoss = false } = deskSlot;
   const deskTone = getDeskTone(employee, isBoss);
+  const deskColor = deskSlot.deskColor || (employee as any)?.deskColor;
 
   return (
     <>
-      <div className={`absolute inset-0 border-[3px] ${deskTone.surface}`} style={{ clipPath: VARIANT_CLIP_PATH[variant], backgroundColor: employee?.deskColor || undefined }} />
+      <div className={`absolute inset-0 border-[3px] ${deskTone.surface}`} style={{ clipPath: VARIANT_CLIP_PATH[variant], backgroundColor: deskColor || undefined }} />
 
       <div className={`absolute z-20 ${VARIANT_BADGE_POSITION[variant]}`}>
         <div className="min-w-10 border border-black bg-white px-2 py-1 text-center text-xs font-bold text-black shadow-sm">
