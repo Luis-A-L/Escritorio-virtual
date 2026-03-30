@@ -1315,14 +1315,15 @@ export default function App() {
               <button onClick={() => setIsEvaluationOpen(true)} className="bg-black border border-[#ff6b35] text-[#ff6b35] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#ff6b35] hover:text-white transition-colors">
                 ⚖️ AVALIAÇÃO MENSAL
               </button>
+              
+              <button onClick={() => setIsDashboardOpen(true)} className="bg-black border border-cyan-400 text-cyan-400 px-2 py-1 text-[8px] md:text-[10px] hover:bg-cyan-400 hover:text-black transition-colors font-bold">
+                📋 LISTA (BETA)
+              </button>
             </>
           )}
 
           <button onClick={() => setIsStatsOpen(true)} className="bg-black border border-[#6c63ff] text-[#6c63ff] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#6c63ff] hover:text-white transition-colors">
             📊 STATUS
-          </button>
-          <button onClick={() => setIsDashboardOpen(true)} className="bg-black border border-cyan-400 text-cyan-400 px-2 py-1 text-[8px] md:text-[10px] hover:bg-cyan-400 hover:text-black transition-colors font-bold">
-            📋 LISTA (BETA)
           </button>
           
           <button 
