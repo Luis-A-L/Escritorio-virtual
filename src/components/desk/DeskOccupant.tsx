@@ -33,7 +33,7 @@ export default function DeskOccupant({ employee, variant, isBoss = false, isSele
         <Character employee={employee} size={isBoss ? 'lg' : 'md'} />
       </div>
       <div className="mt-1 whitespace-nowrap rounded border border-gray-600 bg-black/85 px-2 py-0.5 text-[10px] text-white shadow-md pointer-events-none">
-        {isBoss ? 'Chefe' : employee.name}
+        {isBoss && !employee.name ? 'Chefe' : employee.name}
       </div>
     </div>
   );
