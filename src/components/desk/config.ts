@@ -1,5 +1,5 @@
 import { type CSSProperties } from 'react';
-import { Employee, DeskVariant } from '../../types';
+import { Employee, DeskVariant, HardwareStyle } from '../../types';
 
 export interface DeskTone {
   surface: string;
@@ -23,6 +23,10 @@ export interface KeyboardTone {
   shell: string;
   keys: string;
   glow?: string;
+}
+
+function resolveStyle(overrideStyle?: HardwareStyle, employeeStyle?: HardwareStyle) {
+  return overrideStyle || employeeStyle;
 }
 
 export const BOSS_EMPLOYEE: Employee = {
@@ -103,14 +107,14 @@ export const VARIANT_CHARACTER_STYLE: Record<DeskVariant, CSSProperties> = {
   boss: { right: 18, bottom: 12 },
 };
 
-export function getDeskTone(employee?: Employee, isBoss?: boolean): DeskTone {
+export function getDeskTone(style?: HardwareStyle, isBoss?: boolean): DeskTone {
   if (isBoss) {
     return {
       surface: 'bg-[#1a1a1a] border-[#090909] shadow-[0_22px_32px_rgba(0,0,0,0.28)]',
     };
   }
 
-  switch (employee?.deskStyle) {
+  switch (style) {
     case 'gamer':
       return {
         surface: 'bg-black border-red-500 shadow-[0_0_18px_rgba(239,68,68,0.35)]',
@@ -126,7 +130,7 @@ export function getDeskTone(employee?: Employee, isBoss?: boolean): DeskTone {
   }
 }
 
-export function getMonitorTone(employee?: Employee, isBoss?: boolean): MonitorTone {
+export function getMonitorTone(style?: HardwareStyle, isBoss?: boolean): MonitorTone {
   if (isBoss) {
     return {
       shell: 'border-[#7e7e7e] bg-[#c2c6cb]',
@@ -136,7 +140,7 @@ export function getMonitorTone(employee?: Employee, isBoss?: boolean): MonitorTo
     };
   }
 
-  switch (employee?.monitorStyle) {
+  switch (style) {
     case 'gamer':
       return {
         shell: 'border-red-500 bg-gray-950 shadow-[0_0_12px_rgba(239,68,68,0.4)]',
@@ -161,7 +165,7 @@ export function getMonitorTone(employee?: Employee, isBoss?: boolean): MonitorTo
   }
 }
 
-export function getMouseTone(employee?: Employee, isBoss?: boolean): MouseTone {
+export function getMouseTone(style?: HardwareStyle, isBoss?: boolean): MouseTone {
   if (isBoss) {
     return {
       shell: 'border-[#7d7d7d] bg-[#e2e8f0]',
@@ -170,7 +174,7 @@ export function getMouseTone(employee?: Employee, isBoss?: boolean): MouseTone {
     };
   }
 
-  switch (employee?.mouseStyle) {
+  switch (style) {
     case 'gamer':
       return {
         shell: 'border-red-500 bg-black shadow-[0_0_10px_rgba(239,68,68,0.35)]',
@@ -191,7 +195,7 @@ export function getMouseTone(employee?: Employee, isBoss?: boolean): MouseTone {
   }
 }
 
-export function getKeyboardTone(employee?: Employee, isBoss?: boolean): KeyboardTone {
+export function getKeyboardTone(style?: HardwareStyle, fallbackStyle?: HardwareStyle, isBoss?: boolean): KeyboardTone {
   if (isBoss) {
     return {
       shell: 'border-[#7d7d7d] bg-[#e2e8f0]',
@@ -199,7 +203,7 @@ export function getKeyboardTone(employee?: Employee, isBoss?: boolean): Keyboard
     };
   }
 
-  switch (employee?.keyboardStyle || employee?.mouseStyle) {
+  switch (resolveStyle(style, fallbackStyle)) {
     case 'gamer':
       return {
         shell: 'border-red-500 bg-black shadow-[0_0_10px_rgba(239,68,68,0.35)]',

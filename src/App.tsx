@@ -4,7 +4,7 @@ import Desk from './components/Desk';
 import Modal from './components/Modal';
 import Character from './components/Character';
 import DataDashboard from './components/DataDashboard';
-import { Employee, Status, Team, ErrorType, EducationLevel, Gender, UserProfile, PositionOffset, LayoutItemReference, DeskSlot, INITIAL_DESK_SLOTS } from './types';
+import { Employee, Status, Team, ErrorType, EducationLevel, Gender, UserProfile, PositionOffset, LayoutItemReference, DeskSlot, HardwareStyle, INITIAL_DESK_SLOTS } from './types';
 import { supabase } from './lib/supabase';
 
 const TEAMS: Team[] = ['Triagem Cível', 'Triagem Crime', 'Retorno Crime', 'Retorno Cível', 'Controle', 'I.A.'];
@@ -20,6 +20,11 @@ const ERROR_TYPES: ErrorType[] = [
 
 const WORKSPACE_WIDTH = 1680;
 const WORKSPACE_HEIGHT = 1210;
+const DEFAULT_DESK_COLORS: Record<HardwareStyle, string> = {
+  simple: '#111111',
+  medium: '#5b3a29',
+  gamer: '#0a0a0a',
+};
 
 function getSeatNumber(employee: Employee) {
   return employee.deskPosition.row * 3 + employee.deskPosition.col + 1;
@@ -1857,8 +1862,19 @@ export default function App() {
                     />
                   </div>
                   <div className="flex gap-1">
-                    {['simple', 'medium', 'gamer'].map(style => (
-                      <button key={style} onClick={() => updateDeskSlot({ ...selectedDeskSlotToEdit, deskStyle: style as any })}
+                    {(['simple', 'medium', 'gamer'] as HardwareStyle[]).map(style => (
+                      <button
+                        key={style}
+                        onClick={() =>
+                          updateDeskSlot({
+                            ...selectedDeskSlotToEdit,
+                            deskStyle: style,
+                            deskColor:
+                              !selectedDeskSlotToEdit.deskColor || selectedDeskSlotToEdit.deskColor === '#ffffff'
+                                ? DEFAULT_DESK_COLORS[style]
+                                : selectedDeskSlotToEdit.deskColor,
+                          })
+                        }
                         className={`flex-1 py-1 border text-[9px] uppercase ${selectedDeskSlotToEdit.deskStyle === style ? 'border-[#00ff88] text-[#00ff88] bg-[#00ff88]/10' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
                       >
                         {style === 'simple' ? 'Simples' : style === 'medium' ? 'Madeira' : 'Gamer'}

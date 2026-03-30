@@ -13,12 +13,13 @@ export default function DeskKeyboard({ deskSlot, employee, isSelected = false }:
   const keyboardOffset = deskSlot.keyboardOffset || employee?.keyboardOffset;
   const keyboardColor = deskSlot.keyboardColor || employee?.keyboardColor;
   const keyboardStyle = deskSlot.keyboardStyle || employee?.keyboardStyle;
+  const mouseStyle = deskSlot.mouseStyle || employee?.mouseStyle;
 
   const isGamer = keyboardStyle === 'gamer' && !isBoss;
   const isMedium = keyboardStyle === 'medium' && !isBoss;
 
   const baseStyle = VARIANT_KEYBOARD_STYLE[variant];
-  const tone = getKeyboardTone(employee, isBoss);
+  const tone = getKeyboardTone(keyboardStyle, mouseStyle, isBoss);
   
   const combinedStyle = {
     ...baseStyle,
