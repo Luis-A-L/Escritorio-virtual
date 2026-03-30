@@ -44,8 +44,9 @@ export default function App() {
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
 
-  const [authEmail, setAuthEmail] = useState('');
+  const [authCpf, setAuthCpf] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authPasswordConfirm, setAuthPasswordConfirm] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -888,8 +889,22 @@ export default function App() {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
+
+    const rawCpf = authCpf.replace(/\D/g, '');
+    if (rawCpf.length !== 11) {
+      setAuthError('Por favor, informe um CPF válido com 11 dígitos.');
+      setAuthLoading(false);
+      return;
+    }
+    const fullEmail = `${rawCpf}@tjpr.jus.br`;
+
     if (isSignUp) {
-      const { error, data } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+      if (authPassword !== authPasswordConfirm) {
+        setAuthError('As senhas não coincidem. Verifique e tente novamente.');
+        setAuthLoading(false);
+        return;
+      }
+      const { error, data } = await supabase.auth.signUp({ email: fullEmail, password: authPassword });
       if (error) setAuthError(error.message);
       else if (data.session === null && data.user) {
         setAwaitingEmailConfirmation(true);
@@ -898,7 +913,7 @@ export default function App() {
         setIsSignUp(false);
       }
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      const { error } = await supabase.auth.signInWithPassword({ email: fullEmail, password: authPassword });
       if (error) {
         if (error.message.includes('Email not confirmed') || error.message.includes('confirm')) {
           setAwaitingEmailConfirmation(true);
@@ -918,7 +933,7 @@ export default function App() {
             <h2 className="text-2xl font-bold text-amber-400 mb-4">VERIFIQUE SEU EMAIL</h2>
             <div className="text-4xl mb-4">📧</div>
             <p className="text-gray-300 mb-6 text-sm">
-              Para sua segurança, só é possível acessar o escritório após confirmar o endereço de email fornecido. Enviamos um link de confirmação para <b className="text-white">{authEmail}</b>.
+              Para sua segurança, só é possível acessar o escritório após confirmar o endereço de email fornecido. Enviamos um link de confirmação para <b className="text-white">{authCpf.replace(/\D/g, '')}@tjpr.jus.br</b>.
             </p>
             <p className="text-gray-400 text-xs mb-6">
               Abra a caixa de entrada (ou pasta de spam), clique no link para ativar a conta e em seguida volte a esta página ou clique no botão abaixo para tentar o login novamente.
@@ -938,8 +953,8 @@ export default function App() {
       <div className="min-h-screen bg-checkerboard font-mono text-white flex flex-col items-center justify-center p-4">
         <div className="bg-[#1a1a2e] p-8 rounded-xl border-4 border-[#00ff88] shadow-[0_0_30px_rgba(0,255,136,0.3)] max-w-md w-full">
           <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold text-[#00ff88] mb-2">MISSION CONTROL</h1>
-            <p className="text-gray-400 text-xs">Virtual Office & Gather Town</p>
+            <h1 className="text-3xl font-bold text-[#00ff88] mb-2">P-SEP-AR Virtual</h1>
+            <p className="text-gray-400 text-xs">Escritório Virtual — TJPR</p>
             <div className="w-16 h-16 mx-auto bg-[#1a1a2e] border-2 border-[#00ff88] rounded-full flex items-center justify-center mt-4 animate-pulse">
               <span className="text-2xl">🏢</span>
             </div>
@@ -949,15 +964,28 @@ export default function App() {
             {authError && <div className="bg-red-900/50 text-red-400 p-2 text-xs border border-red-500 rounded">{authError}</div>}
             
             <div>
-              <label className="text-xs text-[#00ff88] tracking-widest uppercase mb-1 block">E-mail Institucional</label>
-              <input 
-                type="email" 
-                required 
-                value={authEmail}
-                onChange={e => setAuthEmail(e.target.value)}
-                className="w-full bg-black border border-gray-600 p-3 text-white focus:border-[#00ff88] outline-none transition-colors"
-                placeholder="nome@tjpr.jus.br"
-              />
+              <label className="text-xs text-[#00ff88] tracking-widest uppercase mb-1 block">CPF</label>
+              <div className="flex bg-black border border-gray-600 focus-within:border-[#00ff88] transition-colors relative">
+                <input 
+                  type="text" 
+                  required 
+                  value={authCpf}
+                  onChange={e => {
+                    let v = e.target.value.replace(/\D/g, '');
+                    if (v.length > 11) v = v.slice(0, 11);
+                    let formatted = v;
+                    if (v.length > 9) formatted = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6,9)}-${v.slice(9)}`;
+                    else if (v.length > 6) formatted = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6)}`;
+                    else if (v.length > 3) formatted = `${v.slice(0,3)}.${v.slice(3)}`;
+                    setAuthCpf(formatted);
+                  }}
+                  className="w-full bg-transparent p-3 text-white outline-none"
+                  placeholder="000.000.000-00"
+                />
+                <span className="p-3 text-gray-400 bg-gray-900 border-l border-gray-600 pointer-events-none select-none flex items-center h-full">
+                  @tjpr.jus.br
+                </span>
+              </div>
             </div>
             
             <div>
@@ -973,6 +1001,21 @@ export default function App() {
               />
             </div>
 
+            {isSignUp && (
+              <div>
+                <label className="text-xs text-[#00ff88] tracking-widest uppercase mb-1 block">Confirmar Senha</label>
+                <input 
+                  type="password" 
+                  required 
+                  value={authPasswordConfirm}
+                  onChange={e => setAuthPasswordConfirm(e.target.value)}
+                  minLength={6}
+                  className="w-full bg-black border border-gray-600 p-3 text-white focus:border-[#00ff88] outline-none transition-colors"
+                  placeholder="••••••••"
+                />
+              </div>
+            )}
+
             <button 
               type="submit" 
               disabled={authLoading}
@@ -983,7 +1026,7 @@ export default function App() {
             
             <button 
               type="button" 
-              onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
+              onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); setAuthPasswordConfirm(''); }}
               className="text-xs text-gray-400 hover:text-white mt-1 text-center w-full underline-offset-2 hover:underline"
             >
               {isSignUp ? 'Já tem conta? Faça o Login' : 'Primeiro acesso? Crie sua senha do escritório'}
