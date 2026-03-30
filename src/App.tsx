@@ -1658,7 +1658,7 @@ export default function App() {
               <option value="">Selecione uma mesa disponível...</option>
               {deskSlots.map(slot => {
                 const isOccupied = employees.some(e => getSeatNumber(e) === slot.seatNumber);
-                if (isOccupied || slot.seatNumber === 22 || slot.isBoss) return null;
+                if (isOccupied || ((slot.seatNumber === 22 || slot.isBoss) && userProfile?.role !== 'admin')) return null;
                 return (
                   <option key={slot.seatNumber} value={slot.seatNumber}>
                     Mesa {slot.seatNumber}
@@ -1797,7 +1797,7 @@ export default function App() {
               <button onClick={() => setClickedEmptySeat(null)} className="text-gray-400 hover:text-white">✕</button>
             </div>
             <p className="text-sm text-gray-400 mb-6">Esta mesa está {clickedEmptySeat === 22 ? 'reservada para o cargo de Chefe.' : 'livre. O que deseja fazer?'}</p>
-            {clickedEmptySeat !== 22 && (
+            {(clickedEmptySeat !== 22 || userProfile?.role === 'admin') && (
               <div className="flex flex-col gap-3">
                 <button 
                   onClick={() => { setIsAddMemberOpen(true); }} 
@@ -1809,11 +1809,11 @@ export default function App() {
                   onClick={() => { setMoveTargetSeat(clickedEmptySeat); setClickedEmptySeat(null); }} 
                   className="w-full border border-[#00ff88] py-2 text-[#00ff88] font-bold uppercase transition hover:bg-[#00ff88]/10"
                 >
-                  Mover Membro Existente
+                  {clickedEmptySeat === 22 ? 'Assumir Mesa do Chefe' : 'Mover Membro Existente'}
                 </button>
               </div>
             )}
-            {clickedEmptySeat === 22 && (
+            {clickedEmptySeat === 22 && userProfile?.role !== 'admin' && (
               <button 
                 onClick={() => setClickedEmptySeat(null)} 
                 className="w-full bg-gray-700 py-2 text-gray-400 font-bold uppercase cursor-not-allowed"
