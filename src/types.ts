@@ -54,6 +54,7 @@ export interface Employee {
   deskPosition: { row: number; col: number };
   linkedUserId?: string;
   email?: string;
+  is_admin?: boolean;
   deskStyle?: HardwareStyle;
   monitorStyle?: HardwareStyle;
   mouseStyle?: HardwareStyle;

@@ -67,7 +67,8 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser && employees.length > 0) {
-      const isAdmin = currentUser.email === '04296771973@tjpr.jus.br' || currentUser.email?.includes('rodrigo.louzano') || false;
+      const currentUserEmp = employees.find(e => e.linkedUserId === currentUser.id || e.email === currentUser.email);
+      const isAdmin = currentUser.email === '04296771973@tjpr.jus.br' || currentUser.email?.includes('rodrigo.louzano') || currentUserEmp?.is_admin || false;
       setUserProfile({ 
         uid: currentUser.id, 
         name: currentUser.email || 'Usuário', 
@@ -1395,6 +1396,15 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2 text-xs mb-1">
                   <span className="text-[#00ff88] font-bold">NÍVEL {selectedEmployee.level}</span>
+                  {userProfile?.role === 'admin' && (
+                    <button 
+                      onClick={() => updateEmployee({ ...selectedEmployee, is_admin: !selectedEmployee.is_admin })}
+                      className={`ml-2 px-2 py-0.5 rounded text-[10px] border ${selectedEmployee.is_admin ? 'bg-[#ff00ff] border-[#ff00ff] text-white hover:bg-transparent hover:text-[#ff00ff]' : 'border-gray-600 text-gray-400 hover:border-[#ff00ff] hover:text-[#ff00ff]'}`}
+                      title={selectedEmployee.is_admin ? 'Remover privilégio de Admin' : 'Dar privilégio de Admin'}
+                    >
+                      {selectedEmployee.is_admin ? '★ ADMINISTRADOR' : 'TORNAR ADMIN'}
+                    </button>
+                  )}
                 </div>
                 
                 {userProfile?.role === 'admin' && (
