@@ -67,7 +67,7 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser && employees.length > 0) {
-      const isAdmin = currentUser.email?.includes('rodrigo.louzano') || false;
+      const isAdmin = currentUser.email === '04296771973@tjpr.jus.br' || currentUser.email?.includes('rodrigo.louzano') || false;
       setUserProfile({ 
         uid: currentUser.id, 
         name: currentUser.email || 'Usuário', 
