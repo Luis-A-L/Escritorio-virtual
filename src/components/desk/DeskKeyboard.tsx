@@ -1,6 +1,5 @@
 import React from 'react';
 import { Employee, DeskSlot } from '../../types';
-import { DeskVariant } from '../../types';
 import { VARIANT_KEYBOARD_STYLE, getKeyboardTone } from './config';
 
 interface DeskKeyboardProps {
@@ -11,9 +10,9 @@ interface DeskKeyboardProps {
 
 export default function DeskKeyboard({ deskSlot, employee, isSelected = false }: DeskKeyboardProps) {
   const { variant, isBoss = false } = deskSlot;
-  const keyboardOffset = deskSlot.keyboardOffset || (employee as any)?.keyboardOffset;
-  const keyboardColor = deskSlot.keyboardColor || (employee as any)?.keyboardColor;
-  const keyboardStyle = deskSlot.keyboardStyle || (employee as any)?.keyboardStyle;
+  const keyboardOffset = deskSlot.keyboardOffset || employee?.keyboardOffset;
+  const keyboardColor = deskSlot.keyboardColor || employee?.keyboardColor;
+  const keyboardStyle = deskSlot.keyboardStyle || employee?.keyboardStyle;
 
   const isGamer = keyboardStyle === 'gamer' && !isBoss;
   const isMedium = keyboardStyle === 'medium' && !isBoss;

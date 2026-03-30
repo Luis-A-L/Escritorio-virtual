@@ -1,6 +1,5 @@
 import React from 'react';
 import { Employee, DeskSlot } from '../../types';
-import { DeskVariant } from '../../types';
 import { VARIANT_BADGE_POSITION, VARIANT_CLIP_PATH, getDeskTone } from './config';
 
 interface DeskSurfaceProps {
@@ -11,7 +10,7 @@ interface DeskSurfaceProps {
 export default function DeskSurface({ deskSlot, employee }: DeskSurfaceProps) {
   const { seatNumber, variant, isBoss = false } = deskSlot;
   const deskTone = getDeskTone(employee, isBoss);
-  const deskColor = deskSlot.deskColor || (employee as any)?.deskColor;
+  const deskColor = deskSlot.deskColor || employee?.deskColor;
 
   return (
     <>

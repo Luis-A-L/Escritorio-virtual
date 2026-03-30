@@ -1,6 +1,5 @@
 import React from 'react';
 import { Employee, DeskSlot } from '../../types';
-import { DeskVariant } from '../../types';
 import { VARIANT_MOUSE_STYLE, getMouseTone } from './config';
 
 interface DeskMouseProps {
@@ -12,9 +11,9 @@ interface DeskMouseProps {
 export default function DeskMouse({ deskSlot, employee, isSelected = false }: DeskMouseProps) {
   const { variant, isBoss = false } = deskSlot;
   const mouseTone = getMouseTone(employee, isBoss);
-  const mouseOffset = deskSlot.mouseOffset || (employee as any)?.mouseOffset;
-  const mouseColor = deskSlot.mouseColor || (employee as any)?.mouseColor;
-  const mouseStyle = deskSlot.mouseStyle || (employee as any)?.mouseStyle;
+  const mouseOffset = deskSlot.mouseOffset || employee?.mouseOffset;
+  const mouseColor = deskSlot.mouseColor || employee?.mouseColor;
+  const mouseStyle = deskSlot.mouseStyle || employee?.mouseStyle;
 
   const isGamer = mouseStyle === 'gamer' && !isBoss;
   const isMedium = mouseStyle === 'medium' && !isBoss;

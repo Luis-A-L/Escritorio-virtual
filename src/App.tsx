@@ -4,7 +4,7 @@ import Desk from './components/Desk';
 import Modal from './components/Modal';
 import Character from './components/Character';
 import DataDashboard from './components/DataDashboard';
-import { Employee, Status, Team, ErrorType, EducationLevel, Gender, UserProfile, PositionOffset, LayoutItemReference, DeskSlot } from './types';
+import { Employee, Status, Team, ErrorType, EducationLevel, Gender, UserProfile, PositionOffset, LayoutItemReference, DeskSlot, INITIAL_DESK_SLOTS } from './types';
 import { supabase } from './lib/supabase';
 
 const TEAMS: Team[] = ['Triagem Cível', 'Triagem Crime', 'Retorno Crime', 'Retorno Cível', 'Controle', 'I.A.'];
@@ -33,11 +33,61 @@ function getDeskPositionFromSeatNumber(seatNumber: number) {
 }
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<any>({ uid: 'mock-user', displayName: 'Admin', email: 'admin@admin' });
-  const [userProfile, setUserProfile] = useState<UserProfile | null>({ uid: 'mock-user', name: 'Admin', email: 'admin@admin', role: 'admin' });
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [usersList, setUsersList] = useState<UserProfile[]>([{ uid: 'mock-user', name: 'Admin', email: 'admin@admin', role: 'admin' }]);
+  const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
+
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] = useState(false);
+  const currentUserId = currentUser?.id;
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (currentUser && employees.length > 0) {
+      const isAdmin = currentUser.email?.includes('rodrigo.louzano') || false;
+      setUserProfile({ 
+        uid: currentUser.id, 
+        name: currentUser.email || 'Usuário', 
+        email: currentUser.email || '', 
+        role: isAdmin ? 'admin' : 'user' 
+      });
+
+      // Auto-link employee
+      const emp = employees.find(e => e.email === currentUser.email);
+      if (emp && emp.linkedUserId !== currentUser.id) {
+        const prepareEmployeeForSupabase = (e: Employee) => ({
+          ...e,
+          characterOffset: e.characterOffset || { x: 0, y: 0, rotation: 0 },
+          deskPosition: e.deskPosition || { row: 0, col: 0 }
+        });
+        
+        const updated = { ...emp, linkedUserId: currentUser.id };
+        setEmployees(prev => prev.map(e => e.id === updated.id ? updated : e));
+        supabase.from('employees').upsert(prepareEmployeeForSupabase(updated)).then(({ error }) => {
+          if (error) console.error("Error linking user to employee", error);
+        });
+      }
+    } else {
+      setUserProfile(null);
+    }
+  }, [currentUser, employees]);
 
 
 
@@ -133,6 +183,201 @@ export default function App() {
   const [hasDragged, setHasDragged] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
+  const renderHomeOfficeCalendar = (targetEmployee: Employee) => {
+    const isOwner = targetEmployee.linkedUserId === currentUserId;
+    const isAdmin = userProfile?.role === 'admin';
+    const currentMonthDate = new Date();
+    const daysInMonth = new Date(
+      currentMonthDate.getFullYear(),
+      currentMonthDate.getMonth() + 1,
+      0,
+    ).getDate();
+    if (!isOwner && !isAdmin) return null;
+
+    return (
+      <div className="mt-4 p-3 bg-sky-950/20 border border-sky-400/20 rounded">
+        <p className="text-sky-300 font-bold mb-2 flex flex-col md:flex-row md:items-center justify-between gap-2">
+          <span>📅 AGENDAR HOME OFFICE</span>
+          <span className="text-[10px] bg-black/40 px-2 py-1 rounded border border-sky-400/30">
+            {targetEmployee.homeOfficeDates?.length || 0} Aprovados / {targetEmployee.pendingHomeOfficeDates?.length || 0} Pendentes
+          </span>
+        </p>
+        <div className="grid grid-cols-7 gap-1 text-[10px] mb-2 text-slate-500 text-center uppercase tracking-tighter">
+            {['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i}>{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: daysInMonth }, (_, i) => {
+            const day = i + 1;
+            const dateStr = new Date(
+              currentMonthDate.getFullYear(),
+              currentMonthDate.getMonth(),
+              day,
+            ).toLocaleDateString('pt-BR');
+            
+            const isApproved = targetEmployee.homeOfficeDates?.includes(dateStr);
+            const isPending = targetEmployee.pendingHomeOfficeDates?.includes(dateStr);
+            
+            const othersApproved = employees.filter(e => e.id !== targetEmployee.id && e.homeOfficeDates?.includes(dateStr)).length;
+            const othersPending = employees.filter(e => e.id !== targetEmployee.id && e.pendingHomeOfficeDates?.includes(dateStr)).length;
+            const isConflict = othersApproved >= 2;
+
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  if (isAdmin && !isOwner) {
+                     if (isPending) {
+                       updateEmployee({ 
+                         ...targetEmployee, 
+                         pendingHomeOfficeDates: targetEmployee.pendingHomeOfficeDates?.filter(d => d !== dateStr),
+                         homeOfficeDates: [...(targetEmployee.homeOfficeDates || []), dateStr]
+                       });
+                     } else if (isApproved) {
+                       updateEmployee({ 
+                         ...targetEmployee, 
+                         homeOfficeDates: targetEmployee.homeOfficeDates?.filter(d => d !== dateStr)
+                       });
+                     }
+                  } else if (isOwner) {
+                     if (isApproved) {
+                       if(!confirm('Deseja cancelar este dia de Home Office aprovado?')) return;
+                       updateEmployee({ 
+                         ...targetEmployee, 
+                         homeOfficeDates: targetEmployee.homeOfficeDates?.filter(d => d !== dateStr)
+                       });
+                     } else if (isPending) {
+                       updateEmployee({ 
+                         ...targetEmployee, 
+                         pendingHomeOfficeDates: targetEmployee.pendingHomeOfficeDates?.filter(d => d !== dateStr)
+                       });
+                     } else {
+                       const totalRequestedAndApproved = (targetEmployee.homeOfficeDates?.length || 0) + (targetEmployee.pendingHomeOfficeDates?.length || 0);
+                       if (totalRequestedAndApproved >= getHomeOfficeAllowance(targetEmployee.level)) {
+                         alert(`Você atingiu o limite mensal de ${getHomeOfficeAllowance(targetEmployee.level)} dias permitidos pelo seu nível.`);
+                         return;
+                       }
+                       if (isConflict) {
+                         alert(`Esta data já possui ${othersApproved} pessoas aprovadas e não pode ser agendada.`);
+                         return;
+                       }
+                       updateEmployee({ 
+                         ...targetEmployee, 
+                         pendingHomeOfficeDates: [...(targetEmployee.pendingHomeOfficeDates || []), dateStr]
+                       });
+                     }
+                  }
+                }}
+                disabled={isOwner && isConflict && !isApproved && !isPending}
+                className={`aspect-square flex items-center justify-center rounded transition-all text-[10px] ${
+                  isApproved 
+                  ? 'bg-emerald-500 text-black font-bold border-2 border-emerald-400' 
+                  : isPending
+                    ? 'bg-amber-400 text-black font-bold border-2 border-amber-300'
+                    : isOwner && isConflict
+                      ? 'bg-red-900/40 text-red-500 cursor-not-allowed border border-red-900/50 opacity-50' 
+                      : isAdmin && !isOwner && isConflict
+                        ? 'bg-red-900/40 text-red-500 border border-red-900/50'
+                        : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent'
+                }`}
+                title={
+                  isApproved ? 'Aprovado' :
+                  isPending ? 'Pendente de aprovação' :
+                  isConflict ? `${othersApproved} aprovados, ${othersPending} pendentes` : 
+                  'Disponível'
+                }
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+        {(isAdmin && !isOwner) && targetEmployee.pendingHomeOfficeDates && targetEmployee.pendingHomeOfficeDates.length > 0 && (
+          <p className="text-[10px] text-amber-400 mt-2 text-center animate-pulse">
+            👆 Clique nas datas em amarelo para Aprovar.
+          </p>
+        )}
+        {isOwner && (
+          <div className="flex justify-center gap-4 mt-2 text-[8px] text-gray-400">
+            <span className="flex items-center gap-1"><div className="w-2 h-2 bg-emerald-500 rounded-sm"></div> Aprovado</span>
+            <span className="flex items-center gap-1"><div className="w-2 h-2 bg-amber-400 rounded-sm"></div> Pendente</span>
+            <span className="flex items-center gap-1"><div className="w-2 h-2 bg-red-900/40 border border-red-900/50 rounded-sm"></div> Lotação</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderSkinCustomization = (targetEmployee: Employee) => {
+    if (!targetEmployee) return null;
+    return (
+      <div className="bg-black p-2 border border-gray-700 text-xs mt-3">
+        <p className="text-[#00ff88] mb-2 uppercase text-[10px] font-bold tracking-widest border-b border-[#00ff88]/30 pb-1">PERSONAGEM (SKIN & AVATAR)</p>
+        <div className="flex gap-4 mb-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input 
+              type="radio" 
+              name={`profileGender-${targetEmployee.id}`} 
+              value="male" 
+              checked={targetEmployee.gender === 'male'} 
+              onChange={() => updateEmployee({ ...targetEmployee, gender: 'male', avatar: 'm1' })}
+              className="accent-[#00ff88]"
+            />
+            Menino
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input 
+              type="radio" 
+              name={`profileGender-${targetEmployee.id}`} 
+              value="female" 
+              checked={targetEmployee.gender === 'female'} 
+              onChange={() => updateEmployee({ ...targetEmployee, gender: 'female', avatar: 'f1' })}
+              className="accent-[#00ff88]"
+            />
+            Menina
+          </label>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {(targetEmployee.gender === 'female' ? ['f1', 'f2', 'f3', 'f4', 'boss'] : ['m1', 'm2', 'm3', 'm4', 'boss']).map(avatarId => (
+            <button
+              key={avatarId}
+              onClick={() => updateEmployee({ ...targetEmployee, avatar: avatarId, customImageUrl: undefined })}
+              className={`p-2 border ${targetEmployee.avatar === avatarId && !targetEmployee.customImageUrl ? 'border-[#00ff88] bg-[#00ff88]/20' : 'border-gray-600 hover:border-gray-400'}`}
+            >
+              <div className="pointer-events-none">
+                 <Character employee={{ ...targetEmployee, avatar: avatarId, customImageUrl: undefined }} size="md" />
+              </div>
+            </button>
+          ))}
+        </div>
+        
+        <div className="mt-3 pt-3 border-t border-gray-700">
+          <label className="block text-gray-500 mb-1">OU FAÇA UPLOAD DE UMA IMAGEM</label>
+          <p className="text-[10px] text-gray-400 mb-2">(Dica: Use uma imagem PNG com fundo transparente)</p>
+          <input 
+            type="file" 
+            accept="image/png, image/jpeg, image/gif"
+            onChange={(e) => handleImageUpload(e, (base64) => updateEmployee({ ...targetEmployee, customImageUrl: base64 }))}
+            className="w-full bg-black border border-gray-600 p-1 text-white text-xs file:mr-4 file:py-1 file:px-2 file:border-0 file:text-xs file:bg-[#00ff88] file:text-black hover:file:bg-white cursor-pointer"
+          />
+          {targetEmployee.customImageUrl && (
+            <div className="mt-2 flex items-center gap-4 bg-gray-900 p-2 border border-gray-700">
+              <div className="w-16 h-16 flex items-center justify-center bg-black/50 overflow-hidden">
+                <img src={targetEmployee.customImageUrl} className="max-w-full max-h-full object-contain" alt="Preview" style={{ imageRendering: 'pixelated' }} />
+              </div>
+              <button 
+                onClick={() => updateEmployee({ ...targetEmployee, customImageUrl: undefined })}
+                className="text-red-500 hover:text-red-400 hover:underline text-xs font-bold"
+              >
+                Remover Imagem
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!scrollContainerRef.current) return;
     setIsDragging(true);
@@ -196,13 +441,14 @@ export default function App() {
             console.warn("Possível erro de esquema ou tabela não encontrada.");
           }
         }
-        if (emps && emps.length > 0) setEmployees(emps);
+        setEmployees((emps ?? []).map(normalizeEmployee));
         
         const { data: desks, error: deskErr } = await supabase.from('desk_slots').select('*');
         if (deskErr) console.error("ERRO DESKS:", deskErr);
-        if (desks && desks.length > 0) setDeskSlots(desks);
+        setDeskSlots(desks && desks.length > 0 ? desks : INITIAL_DESK_SLOTS);
       } catch (err) {
         console.error("Error loading data from Supabase:", err);
+        setDeskSlots(INITIAL_DESK_SLOTS);
       }
     };
     loadData();
@@ -212,8 +458,9 @@ export default function App() {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           setEmployees(prev => {
             const exists = prev.find(e => e.id === payload.new.id);
-            if (exists) return prev.map(e => e.id === payload.new.id ? payload.new as Employee : e);
-            return [...prev, payload.new as Employee];
+            const nextEmployee = normalizeEmployee(payload.new as Employee);
+            if (exists) return prev.map(e => e.id === payload.new.id ? nextEmployee : e);
+            return [...prev, nextEmployee];
           });
         } else if (payload.eventType === 'DELETE') {
           setEmployees(prev => prev.filter(e => e.id !== payload.old.id));
@@ -221,8 +468,14 @@ export default function App() {
       }).subscribe();
 
     const deskSub = supabase.channel('desks_sync')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'desk_slots' }, payload => {
-        setDeskSlots(prev => prev.map(d => d.seatNumber === payload.new.seatNumber ? payload.new as DeskSlot : d));
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'desk_slots' }, payload => {
+        if (payload.eventType === 'INSERT') {
+          setDeskSlots(prev => [...prev, payload.new as DeskSlot].sort((a, b) => a.seatNumber - b.seatNumber));
+        } else if (payload.eventType === 'UPDATE') {
+          setDeskSlots(prev => prev.map(d => d.seatNumber === payload.new.seatNumber ? payload.new as DeskSlot : d));
+        } else if (payload.eventType === 'DELETE') {
+          setDeskSlots(prev => prev.filter(d => d.seatNumber !== payload.old.seatNumber));
+        }
       }).subscribe();
 
     return () => {
@@ -388,19 +641,28 @@ export default function App() {
     });
   }, []);
 
-  const prepareEmployeeForSupabase = (emp: Employee) => {
+  const normalizeEmployee = (emp: Employee): Employee => {
+    const approvedHomeOfficeDays = emp.homeOfficeDates?.length || 0;
     return {
       ...emp,
+      homeOfficeUsedThisMonth: approvedHomeOfficeDays,
       characterOffset: emp.characterOffset || { x: 0, y: 0, rotation: 0 },
-      // Ensure deskPosition is also present
       deskPosition: emp.deskPosition || { row: 0, col: 0 }
     };
   };
 
+  const prepareEmployeeForSupabase = (emp: Employee) => {
+    const normalized = normalizeEmployee(emp);
+    return {
+      ...normalized,
+    };
+  };
+
   const updateEmployee = async (updated: Employee) => {
-    const toSave = prepareEmployeeForSupabase(updated);
-    setEmployees(prev => prev.map(employee => employee.id === updated.id ? updated : employee));
-    setSelectedEmployee(prev => prev?.id === updated.id ? updated : prev);
+    const normalized = normalizeEmployee(updated);
+    const toSave = prepareEmployeeForSupabase(normalized);
+    setEmployees(prev => prev.map(employee => employee.id === normalized.id ? normalized : employee));
+    setSelectedEmployee(prev => prev?.id === normalized.id ? normalized : prev);
     const { error } = await supabase.from('employees').upsert(toSave);
     if (error) {
       console.error("Error updating employee", error);
@@ -409,11 +671,12 @@ export default function App() {
   };
 
   const updateEmployees = async (updates: Employee[]) => {
+    const normalizedUpdates = updates.map(normalizeEmployee);
     setEmployees(prev => prev.map(emp => {
-      const update = updates.find(u => u.id === emp.id);
+      const update = normalizedUpdates.find(u => u.id === emp.id);
       return update ? update : emp;
     }));
-    const toSave = updates.map(prepareEmployeeForSupabase);
+    const toSave = normalizedUpdates.map(prepareEmployeeForSupabase);
     const { error } = await supabase.from('employees').upsert(toSave);
     if (error) {
       console.error("Error updating employees", error);
@@ -616,23 +879,111 @@ export default function App() {
     ? orderedEmployees.findIndex(employee => employee.id === selectedEmployee.id)
     : -1;
 
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError('');
+    if (isSignUp) {
+      const { error, data } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+      if (error) setAuthError(error.message);
+      else if (data.session === null && data.user) {
+        setAwaitingEmailConfirmation(true);
+      } else {
+        alert('Conta criada! Faça login para continuar.');
+        setIsSignUp(false);
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      if (error) {
+        if (error.message.includes('Email not confirmed') || error.message.includes('confirm')) {
+          setAwaitingEmailConfirmation(true);
+        } else {
+          setAuthError(error.message);
+        }
+      }
+    }
+    setAuthLoading(false);
+  };
+
   if (!currentUser) {
+    if (awaitingEmailConfirmation) {
+      return (
+        <div className="min-h-screen bg-checkerboard font-mono text-white flex flex-col items-center justify-center p-4">
+          <div className="bg-[#1a1a2e] p-8 rounded-xl border-4 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.3)] max-w-md w-full text-center">
+            <h2 className="text-2xl font-bold text-amber-400 mb-4">VERIFIQUE SEU EMAIL</h2>
+            <div className="text-4xl mb-4">📧</div>
+            <p className="text-gray-300 mb-6 text-sm">
+              Para sua segurança, só é possível acessar o escritório após confirmar o endereço de email fornecido. Enviamos um link de confirmação para <b className="text-white">{authEmail}</b>.
+            </p>
+            <p className="text-gray-400 text-xs mb-6">
+              Abra a caixa de entrada (ou pasta de spam), clique no link para ativar a conta e em seguida volte a esta página ou clique no botão abaixo para tentar o login novamente.
+            </p>
+            <button 
+              onClick={() => setAwaitingEmailConfirmation(false)}
+              className="w-full bg-amber-400 text-black font-bold py-3 hover:bg-amber-300 transition-colors uppercase tracking-widest"
+            >
+              Voltar para o Login
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-checkerboard font-mono text-white flex flex-col items-center justify-center p-4">
-        <div className="bg-[#1a1a2e] p-8 rounded-xl border-4 border-[#00ff88] shadow-[0_0_30px_rgba(0,255,136,0.3)] max-w-md w-full text-center">
-          <h1 className="text-3xl font-bold text-[#00ff88] mb-2">MISSION CONTROL</h1>
-          <p className="text-gray-400 mb-8">Virtual Office & Gather Town</p>
-          
-          <div className="w-24 h-24 mx-auto bg-[#1a1a2e] border-4 border-[#00ff88] rounded-full flex items-center justify-center mb-8 animate-pulse">
-            <span className="text-4xl">🏢</span>
+        <div className="bg-[#1a1a2e] p-8 rounded-xl border-4 border-[#00ff88] shadow-[0_0_30px_rgba(0,255,136,0.3)] max-w-md w-full">
+          <div className="text-center mb-6">
+            <h1 className="text-3xl font-bold text-[#00ff88] mb-2">MISSION CONTROL</h1>
+            <p className="text-gray-400 text-xs">Virtual Office & Gather Town</p>
+            <div className="w-16 h-16 mx-auto bg-[#1a1a2e] border-2 border-[#00ff88] rounded-full flex items-center justify-center mt-4 animate-pulse">
+              <span className="text-2xl">🏢</span>
+            </div>
           </div>
 
-          <button 
-            onClick={() => setCurrentUser({ uid: 'mock-user'})}
-            className="w-full bg-[#00ff88] text-black font-bold py-3 px-4 rounded hover:bg-[#00cc6a] transition-colors flex items-center justify-center gap-2"
-          >
-            <span>🔑</span> Entrar com Google
-          </button>
+          <form onSubmit={handleAuth} className="flex flex-col gap-4">
+            {authError && <div className="bg-red-900/50 text-red-400 p-2 text-xs border border-red-500 rounded">{authError}</div>}
+            
+            <div>
+              <label className="text-xs text-[#00ff88] tracking-widest uppercase mb-1 block">E-mail Institucional</label>
+              <input 
+                type="email" 
+                required 
+                value={authEmail}
+                onChange={e => setAuthEmail(e.target.value)}
+                className="w-full bg-black border border-gray-600 p-3 text-white focus:border-[#00ff88] outline-none transition-colors"
+                placeholder="nome@tjpr.jus.br"
+              />
+            </div>
+            
+            <div>
+              <label className="text-xs text-[#00ff88] tracking-widest uppercase mb-1 block">Senha</label>
+              <input 
+                type="password" 
+                required 
+                value={authPassword}
+                onChange={e => setAuthPassword(e.target.value)}
+                minLength={6}
+                className="w-full bg-black border border-gray-600 p-3 text-white focus:border-[#00ff88] outline-none transition-colors"
+                placeholder="••••••••"
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={authLoading}
+              className="w-full bg-[#00ff88] text-black font-bold py-3 mt-2 hover:bg-[#00cc6a] transition-colors uppercase disabled:opacity-50"
+            >
+              {authLoading ? 'Aguarde...' : isSignUp ? 'Criar Conta' : 'Entrar'}
+            </button>
+            
+            <button 
+              type="button" 
+              onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
+              className="text-xs text-gray-400 hover:text-white mt-1 text-center w-full underline-offset-2 hover:underline"
+            >
+              {isSignUp ? 'Já tem conta? Faça o Login' : 'Primeiro acesso? Crie sua senha do escritório'}
+            </button>
+          </form>
         </div>
       </div>
     );
@@ -809,8 +1160,15 @@ export default function App() {
                     setSelectedDeskSlotToEdit(slot);
                     return;
                   }
-                  if (employee) setSelectedEmployee(employee);
-                  else setClickedEmptySeat(slot.seatNumber);
+                  if (employee) {
+                    if (employee.linkedUserId === currentUserId) {
+                      setSelectedDeskSlotToEdit(slot);
+                    } else {
+                      setSelectedEmployee(employee);
+                    }
+                  } else {
+                    setClickedEmptySeat(slot.seatNumber);
+                  }
                 };
 
                 return (
@@ -882,38 +1240,48 @@ export default function App() {
 
       <div className="fixed bottom-0 left-0 w-full bg-[#1a1a2e] border-t-4 border-[#00ff88] p-2 flex justify-between items-center z-50 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
         <div className="flex-1 overflow-hidden border-r-2 border-gray-700 mr-4">
-          <div className="text-[#00ff88] text-[10px] md:text-xs">Modo Administrador</div>
+          <div className="text-[#00ff88] text-[10px] md:text-xs">Modo {userProfile?.role === 'admin' ? 'Administrador' : 'Usuário'}</div>
         </div>
         <div className="flex gap-2">
-          <button 
-            onClick={() => setIsLayoutEditMode(!isLayoutEditMode)} 
-            className={`border px-2 py-1 text-[8px] md:text-[10px] transition-colors ${
-              isLayoutEditMode 
-              ? 'bg-[#ff00ff] border-[#ff00ff] text-white hover:bg-[#cc00cc]' 
-              : 'bg-black border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-white'
-            }`}
-          >
-            {isLayoutEditMode ? '💾 SALVAR MÓDULOS' : '🏗️ EDITAR LAYOUT'}
-          </button>
-          
-          <button onClick={() => setIsBossPanelOpen(true)} className="bg-black border border-purple-400 text-purple-400 px-2 py-1 text-[8px] md:text-[10px] hover:bg-purple-400 hover:text-black transition-colors">
-            👑 PAINEL DO CHEFE
-          </button>
-          
-          <button onClick={() => setIsAddMemberOpen(true)} className="bg-black border border-[#00ff88] text-[#00ff88] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#00ff88] hover:text-black transition-colors">
-            + MEMBRO
-          </button>
-          
+          {userProfile?.role === 'admin' && (
+            <>
+              <button 
+                onClick={() => setIsLayoutEditMode(!isLayoutEditMode)} 
+                className={`border px-2 py-1 text-[8px] md:text-[10px] transition-colors ${
+                  isLayoutEditMode 
+                  ? 'bg-[#ff00ff] border-[#ff00ff] text-white hover:bg-[#cc00cc]' 
+                  : 'bg-black border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-white'
+                }`}
+              >
+                {isLayoutEditMode ? '💾 SALVAR MÓDULOS' : '🏗️ EDITAR LAYOUT'}
+              </button>
+              
+              <button onClick={() => setIsBossPanelOpen(true)} className="bg-black border border-purple-400 text-purple-400 px-2 py-1 text-[8px] md:text-[10px] hover:bg-purple-400 hover:text-black transition-colors">
+                👑 PAINEL DO CHEFE
+              </button>
+              
+              <button onClick={() => setIsAddMemberOpen(true)} className="bg-black border border-[#00ff88] text-[#00ff88] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#00ff88] hover:text-black transition-colors">
+                + MEMBRO
+              </button>
+              
+              <button onClick={() => setIsEvaluationOpen(true)} className="bg-black border border-[#ff6b35] text-[#ff6b35] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#ff6b35] hover:text-white transition-colors">
+                ⚖️ AVALIAÇÃO MENSAL
+              </button>
+            </>
+          )}
 
-          
-          <button onClick={() => setIsEvaluationOpen(true)} className="bg-black border border-[#ff6b35] text-[#ff6b35] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#ff6b35] hover:text-white transition-colors">
-            ⚖️ AVALIAÇÃO MENSAL
-          </button>
           <button onClick={() => setIsStatsOpen(true)} className="bg-black border border-[#6c63ff] text-[#6c63ff] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#6c63ff] hover:text-white transition-colors">
             📊 STATUS
           </button>
           <button onClick={() => setIsDashboardOpen(true)} className="bg-black border border-cyan-400 text-cyan-400 px-2 py-1 text-[8px] md:text-[10px] hover:bg-cyan-400 hover:text-black transition-colors font-bold">
             📋 LISTA (BETA)
+          </button>
+          
+          <button 
+            onClick={() => supabase.auth.signOut()} 
+            className="bg-red-900/40 border border-red-500 text-red-500 px-2 py-1 text-[8px] md:text-[10px] hover:bg-red-500 hover:text-white transition-colors font-bold ml-2"
+          >
+            🚪 SAIR
           </button>
         </div>
       </div>
@@ -980,41 +1348,43 @@ export default function App() {
                   <span className="text-[#00ff88] font-bold">NÍVEL {selectedEmployee.level}</span>
                 </div>
                 
-                <div className="flex items-center gap-2 mt-2">
-                  <label className="text-gray-400 text-xs">Mudar mesa:</label>
-                  <select 
-                    className="bg-black border border-gray-600 p-1 text-white text-xs outline-none focus:border-[#00ff88]"
-                    value={getSeatNumber(selectedEmployee)}
-                    onChange={(e) => {
-                      const newSeat = parseInt(e.target.value, 10);
-                      const occupant = employeesBySeat.get(newSeat);
-                      
-                      setConfirmDialog({
-                        title: occupant && occupant.id !== selectedEmployee.id ? "CONFIRMAR TROCA" : "CONFIRMAR MUDANÇA",
-                        message: occupant && occupant.id !== selectedEmployee.id 
-                          ? `Deseja trocar ${selectedEmployee.name} de lugar com ${occupant.name} na Mesa ${newSeat}?`
-                          : `Deseja mover ${selectedEmployee.name} para a Mesa ${newSeat}?`,
-                        onConfirm: () => {
-                          changeEmployeeDesk(selectedEmployee, newSeat);
-                          setConfirmDialog(null);
-                        }
-                      });
-                    }}
-                  >
-                    {deskSlots.filter(s => !s.isBoss).map(slot => {
-                      const occupant = employeesBySeat.get(slot.seatNumber);
-                      const isOccupiedByOther = occupant && occupant.id !== selectedEmployee.id;
-                      return (
-                        <option key={slot.seatNumber} value={slot.seatNumber}>
-                          Mesa {slot.seatNumber} {isOccupiedByOther ? `(Trocar com ${occupant.name})` : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
+                {userProfile?.role === 'admin' && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <label className="text-gray-400 text-xs">Mudar mesa:</label>
+                    <select 
+                      className="bg-black border border-gray-600 p-1 text-white text-xs outline-none focus:border-[#00ff88]"
+                      value={getSeatNumber(selectedEmployee)}
+                      onChange={(e) => {
+                        const newSeat = parseInt(e.target.value, 10);
+                        const occupant = employeesBySeat.get(newSeat);
+                        
+                        setConfirmDialog({
+                          title: occupant && occupant.id !== selectedEmployee.id ? "CONFIRMAR TROCA" : "CONFIRMAR MUDANÇA",
+                          message: occupant && occupant.id !== selectedEmployee.id 
+                            ? `Deseja trocar ${selectedEmployee.name} de lugar com ${occupant.name} na Mesa ${newSeat}?`
+                            : `Deseja mover ${selectedEmployee.name} para a Mesa ${newSeat}?`,
+                          onConfirm: () => {
+                            changeEmployeeDesk(selectedEmployee, newSeat);
+                            setConfirmDialog(null);
+                          }
+                        });
+                      }}
+                    >
+                      {deskSlots.filter(s => !s.isBoss).map(slot => {
+                        const occupant = employeesBySeat.get(slot.seatNumber);
+                        const isOccupiedByOther = occupant && occupant.id !== selectedEmployee.id;
+                        return (
+                          <option key={slot.seatNumber} value={slot.seatNumber}>
+                            Mesa {slot.seatNumber} {isOccupiedByOther ? `(Trocar com ${occupant.name})` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
 
                 <p className="text-xs text-gray-400 mt-2">
-                  Home Office: {selectedEmployee.homeOfficeUsedThisMonth} / {getHomeOfficeAllowance(selectedEmployee.level)} dias usados
+                  Home Office: {selectedEmployee.homeOfficeDates?.length || 0} / {getHomeOfficeAllowance(selectedEmployee.level)} dias usados
                 </p>
               </div>
             </div>
@@ -1044,56 +1414,7 @@ export default function App() {
                     ))}
                   </div>
 
-                  {selectedEmployee.status === 'remote' && (
-                    <div className="mt-4 p-3 bg-sky-950/20 border border-sky-400/20 rounded">
-                      <p className="text-sky-300 font-bold mb-2 flex items-center gap-2">
-                         <span>📅</span> RESERVAR DIAS (MÁX {getHomeOfficeAllowance(selectedEmployee.level)})
-                      </p>
-                      <div className="grid grid-cols-7 gap-1 text-[10px] mb-2 text-slate-500 text-center uppercase tracking-tighter">
-                         {['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i}>{d}</div>)}
-                      </div>
-                      <div className="grid grid-cols-7 gap-1">
-                        {Array.from({length: 31}, (_, i) => {
-                          const day = i + 1;
-                          const dateStr = `${day < 10 ? '0'+day : day}/03/2026`; // Mocking March 2026
-                          const isSelected = selectedEmployee.homeOfficeDates?.includes(dateStr);
-                          const othersOnDate = employees.filter(e => e.id !== selectedEmployee.id && e.homeOfficeDates?.includes(dateStr)).length;
-                          const isConflict = othersOnDate >= 2;
-
-                          return (
-                            <button
-                              key={i}
-                              onClick={() => {
-                                const current = selectedEmployee.homeOfficeDates || [];
-                                if (isSelected) {
-                                  updateEmployee({ ...selectedEmployee, homeOfficeDates: current.filter(d => d !== dateStr) });
-                                } else {
-                                  if (current.length >= getHomeOfficeAllowance(selectedEmployee.level)) {
-                                    alert("Limite de dias de Home Office atingido!");
-                                    return;
-                                  }
-                                  if (isConflict) {
-                                    if(!confirm(`Já existem ${othersOnDate} pessoas em HO neste dia. Deseja continuar?`)) return;
-                                  }
-                                  updateEmployee({ ...selectedEmployee, homeOfficeDates: [...current, dateStr] });
-                                }
-                              }}
-                              className={`aspect-square flex items-center justify-center rounded transition-all ${
-                                isSelected 
-                                ? 'bg-sky-400 text-black font-bold' 
-                                : isConflict 
-                                  ? 'bg-red-900/40 text-red-300 hover:bg-red-800/40' 
-                                  : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                              }`}
-                              title={isConflict ? `${othersOnDate} pessoas já reservaram` : ''}
-                            >
-                              {day}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  {renderHomeOfficeCalendar(selectedEmployee)}
 
                   {selectedEmployee.status === 'vacation' && (
                     <div className="mt-4 p-3 bg-amber-950/20 border border-amber-400/20 rounded flex flex-col gap-3">
@@ -1147,72 +1468,21 @@ export default function App() {
               </div>
             )}
 
-            {(userProfile?.role === 'admin' || selectedEmployee.linkedUserId === currentUser?.uid) && (
+            {(userProfile?.role === 'admin' || selectedEmployee.linkedUserId === currentUserId) && (
               <>
-                <div className="bg-black p-2 border border-gray-700 text-xs">
-                  <p className="text-gray-500 mb-2">PERSONALIZAR SKIN</p>
-                  <div className="flex gap-4 mb-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="profileGender" 
-                        value="male" 
-                        checked={selectedEmployee.gender === 'male'} 
-                        onChange={() => updateEmployee({ ...selectedEmployee, gender: 'male', avatar: 'm1' })}
-                        className="accent-[#00ff88]"
-                      />
-                      Menino
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="profileGender" 
-                        value="female" 
-                        checked={selectedEmployee.gender === 'female'} 
-                        onChange={() => updateEmployee({ ...selectedEmployee, gender: 'female', avatar: 'f1' })}
-                        className="accent-[#00ff88]"
-                      />
-                      Menina
-                    </label>
-                  </div>
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    {(selectedEmployee.gender === 'female' ? ['f1', 'f2', 'f3', 'f4', 'boss'] : ['m1', 'm2', 'm3', 'm4', 'boss']).map(avatarId => (
-                      <button
-                        key={avatarId}
-                        onClick={() => updateEmployee({ ...selectedEmployee, avatar: avatarId, customImageUrl: undefined })}
-                        className={`p-2 border ${selectedEmployee.avatar === avatarId && !selectedEmployee.customImageUrl ? 'border-[#00ff88] bg-[#00ff88]/20' : 'border-gray-600 hover:border-gray-400'}`}
-                      >
-                        <div className="pointer-events-none">
-                           <Character employee={{ ...selectedEmployee, avatar: avatarId, customImageUrl: undefined }} size="md" />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  
-                  <div className="mt-3 pt-3 border-t border-gray-700">
-                    <label className="block text-gray-500 mb-1">OU FAÇA UPLOAD DE UMA IMAGEM</label>
-                    <p className="text-[10px] text-gray-400 mb-2">(Dica: Use uma imagem PNG com fundo transparente)</p>
-                    <input 
-                      type="file" 
-                      accept="image/png, image/jpeg, image/gif"
-                      onChange={(e) => handleImageUpload(e, (base64) => updateEmployee({ ...selectedEmployee, customImageUrl: base64 }))}
-                      className="w-full bg-black border border-gray-600 p-1 text-white text-xs file:mr-4 file:py-1 file:px-2 file:border-0 file:text-xs file:bg-[#00ff88] file:text-black hover:file:bg-white cursor-pointer"
-                    />
-                    {selectedEmployee.customImageUrl && (
-                      <div className="mt-2 flex items-center gap-4 bg-gray-900 p-2 border border-gray-700">
-                        <div className="w-16 h-16 flex items-center justify-center bg-black/50 overflow-hidden">
-                          <img src={selectedEmployee.customImageUrl} className="max-w-full max-h-full object-contain" alt="Preview" style={{ imageRendering: 'pixelated' }} />
-                        </div>
-                        <button 
-                          onClick={() => updateEmployee({ ...selectedEmployee, customImageUrl: undefined })}
-                          className="text-red-500 hover:text-red-400 hover:underline text-xs font-bold"
-                        >
-                          Remover Imagem
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <button
+                  className="w-full bg-[#00ff88]/20 text-[#00ff88] hover:bg-[#00ff88]/40 py-2 border border-[#00ff88] mb-4 font-bold text-xs uppercase tracking-widest transition-colors"
+                  onClick={() => {
+                    const desk = deskSlots.find(d => d.seatNumber === getSeatNumber(selectedEmployee));
+                    if (desk) {
+                      setSelectedDeskSlotToEdit(desk);
+                      setSelectedEmployee(null);
+                    }
+                  }}
+                >
+                  🛠️ PERSONALIZAR MÓDULOS DA MESA
+                </button>
+
 
 
 
@@ -1604,6 +1874,19 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {(() => {
+              const targetEmployeeForDesk = employeesBySeat.get(selectedDeskSlotToEdit.seatNumber);
+              if (targetEmployeeForDesk) {
+                return (
+                  <>
+                    {renderHomeOfficeCalendar(targetEmployeeForDesk)}
+                    {renderSkinCustomization(targetEmployeeForDesk)}
+                  </>
+                );
+              }
+              return null;
+            })()}
 
             <button 
               onClick={() => setSelectedDeskSlotToEdit(null)}

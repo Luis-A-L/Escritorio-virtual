@@ -3,6 +3,7 @@ export type EducationLevel = 'Ensino Médio' | 'Graduação' | 'Pós-graduação
 export type Status = 'on-site' | 'remote' | 'absent' | 'vacation';
 export type Mood = 'focused' | 'happy' | 'tired' | 'blocked';
 export type DeskVariant = 'corner-tl' | 'corner-tr' | 'corner-bl' | 'corner-br' | 'pillar' | 'boss';
+export type HardwareStyle = 'simple' | 'medium' | 'gamer';
 
 export type ErrorType = 
   | 'Distribuição incorreta'
@@ -43,6 +44,7 @@ export interface Employee {
   errors: EmployeeError[];
   homeOfficeUsedThisMonth: number;
   homeOfficeDates?: string[];
+  pendingHomeOfficeDates?: string[];
   vacationStart?: string;
   vacationEnd?: string;
   mood: Mood;
@@ -51,6 +53,18 @@ export interface Employee {
   customImageUrl?: string;
   deskPosition: { row: number; col: number };
   linkedUserId?: string;
+  email?: string;
+  deskStyle?: HardwareStyle;
+  monitorStyle?: HardwareStyle;
+  mouseStyle?: HardwareStyle;
+  keyboardStyle?: HardwareStyle;
+  deskColor?: string;
+  monitorColor?: string;
+  mouseColor?: string;
+  keyboardColor?: string;
+  monitorOffset?: PositionOffset;
+  mouseOffset?: PositionOffset;
+  keyboardOffset?: PositionOffset;
   characterOffset?: PositionOffset;
 }
 
@@ -74,10 +88,10 @@ export interface DeskSlot {
   variant: DeskVariant;
   isBoss?: boolean;
   rotation?: number;
-  deskStyle?: 'simple' | 'medium' | 'gamer';
-  monitorStyle?: 'simple' | 'medium' | 'gamer';
-  mouseStyle?: 'simple' | 'medium' | 'gamer';
-  keyboardStyle?: 'simple' | 'medium' | 'gamer';
+  deskStyle?: HardwareStyle;
+  monitorStyle?: HardwareStyle;
+  mouseStyle?: HardwareStyle;
+  keyboardStyle?: HardwareStyle;
   deskColor?: string;
   monitorColor?: string;
   mouseColor?: string;
