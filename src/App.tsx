@@ -4,6 +4,7 @@ import Desk from './components/Desk';
 import Modal from './components/Modal';
 import Character from './components/Character';
 import DataDashboard from './components/DataDashboard';
+import HomeOfficeApprovalPanel from './components/HomeOfficeApprovalPanel';
 import { Employee, Status, Team, ErrorType, EducationLevel, Gender, UserProfile, PositionOffset, LayoutItemReference, DeskSlot, HardwareStyle, INITIAL_DESK_SLOTS } from './types';
 import { supabase } from './lib/supabase';
 
@@ -37,11 +38,19 @@ function getDeskPositionFromSeatNumber(seatNumber: number) {
   };
 }
 
+function parsePtBrDate(value: string) {
+  const [day, month, year] = value.split('/').map(Number);
+  return new Date(year, month - 1, day).getTime();
+}
+
+function sortPtBrDates(dates: string[]) {
+  return [...dates].sort((left, right) => parsePtBrDate(left) - parsePtBrDate(right));
+}
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
 
   const [authCpf, setAuthCpf] = useState('');
@@ -117,6 +126,7 @@ export default function App() {
   const dragStartedRef = useRef(false);
 
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [isHomeOfficeApprovalOpen, setIsHomeOfficeApprovalOpen] = useState(false);
   const [alignmentGuides, setAlignmentGuides] = useState<{type: 'h'|'v', pos: number}[]>([]);
 
   useEffect(() => {
@@ -177,7 +187,6 @@ export default function App() {
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isEvaluationOpen, setIsEvaluationOpen] = useState(false);
-  const [isBossPanelOpen, setIsBossPanelOpen] = useState(false);
   
   const [newMemberGender, setNewMemberGender] = useState<Gender>('male');
   const [newMemberAvatar, setNewMemberAvatar] = useState<string>('m1');
@@ -235,11 +244,7 @@ export default function App() {
                 onClick={() => {
                   if (isAdmin && !isOwner) {
                      if (isPending) {
-                       updateEmployee({ 
-                         ...targetEmployee, 
-                         pendingHomeOfficeDates: targetEmployee.pendingHomeOfficeDates?.filter(d => d !== dateStr),
-                         homeOfficeDates: [...(targetEmployee.homeOfficeDates || []), dateStr]
-                       });
+                       approvePendingHomeOfficeDate(targetEmployee.id, dateStr);
                      } else if (isApproved) {
                        updateEmployee({ 
                          ...targetEmployee, 
@@ -689,6 +694,47 @@ export default function App() {
       console.error("Error updating employees", error);
       alert(`Erro ao salvar no banco: ${error.message}`);
     }
+  };
+
+  const getEmployeeById = (employeeId: number) => {
+    return employees.find((employee) => employee.id === employeeId) || null;
+  };
+
+  const getApprovedHomeOfficeCount = (date: string, excludedEmployeeId?: number) => {
+    return employees.filter(
+      (employee) => employee.id !== excludedEmployeeId && employee.homeOfficeDates?.includes(date),
+    ).length;
+  };
+
+  const approvePendingHomeOfficeDate = async (employeeId: number, date: string) => {
+    const employee = getEmployeeById(employeeId);
+    if (!employee) return;
+
+    const approvedByOthers = getApprovedHomeOfficeCount(date, employee.id);
+    if (approvedByOthers >= 2) {
+      alert(`A data ${date} ja possui ${approvedByOthers} pessoas aprovadas.`);
+      return;
+    }
+
+    const updatedEmployee = {
+      ...employee,
+      pendingHomeOfficeDates: (employee.pendingHomeOfficeDates || []).filter((item) => item !== date),
+      homeOfficeDates: sortPtBrDates(Array.from(new Set([...(employee.homeOfficeDates || []), date]))),
+    };
+
+    await updateEmployee(updatedEmployee);
+  };
+
+  const rejectPendingHomeOfficeDate = async (employeeId: number, date: string) => {
+    const employee = getEmployeeById(employeeId);
+    if (!employee) return;
+
+    const updatedEmployee = {
+      ...employee,
+      pendingHomeOfficeDates: (employee.pendingHomeOfficeDates || []).filter((item) => item !== date),
+    };
+
+    await updateEmployee(updatedEmployee);
   };
 
   const updateDeskSlot = async (updated: DeskSlot) => {
@@ -1305,10 +1351,6 @@ export default function App() {
                 {isLayoutEditMode ? '💾 SALVAR MÓDULOS' : '🏗️ EDITAR LAYOUT'}
               </button>
               
-              <button onClick={() => setIsBossPanelOpen(true)} className="bg-black border border-purple-400 text-purple-400 px-2 py-1 text-[8px] md:text-[10px] hover:bg-purple-400 hover:text-black transition-colors">
-                👑 PAINEL DO CHEFE
-              </button>
-              
               <button onClick={() => setIsAddMemberOpen(true)} className="bg-black border border-[#00ff88] text-[#00ff88] px-2 py-1 text-[8px] md:text-[10px] hover:bg-[#00ff88] hover:text-black transition-colors">
                 + MEMBRO
               </button>
@@ -1327,6 +1369,12 @@ export default function App() {
             📊 STATUS
           </button>
           
+          {userProfile?.role === 'admin' && (
+            <button onClick={() => setIsHomeOfficeApprovalOpen(true)} className="bg-black border border-amber-400 text-amber-300 px-2 py-1 text-[8px] md:text-[10px] hover:bg-amber-400 hover:text-black transition-colors font-bold">
+              APROVAR HOME OFFICE
+            </button>
+          )}
+
           <button 
             onClick={() => supabase.auth.signOut()} 
             className="bg-red-900/40 border border-red-500 text-red-500 px-2 py-1 text-[8px] md:text-[10px] hover:bg-red-500 hover:text-white transition-colors font-bold ml-2"
@@ -1520,7 +1568,18 @@ export default function App() {
                   <div className="flex-1 overflow-auto max-h-24 mt-2 border-t border-gray-800 pt-2">
                     <p className="text-gray-500 mb-1">Erros este mês: {selectedEmployee.errors?.length || 0}</p>
                     {selectedEmployee.errors?.map(err => (
-                      <div key={err.id} className="text-[10px] text-red-400 mb-1">- {err.type} ({err.date})</div>
+                      <div key={err.id} className="flex items-center justify-between text-[10px] text-red-400 mb-1 gap-2">
+                        <span>- {err.type} ({err.date})</span>
+                        {userProfile?.role === 'admin' && (
+                          <button
+                            onClick={() => updateEmployee({ ...selectedEmployee, errors: selectedEmployee.errors?.filter(e => e.id !== err.id) })}
+                            className="text-red-600 hover:text-red-400 shrink-0 font-bold"
+                            title="Remover ocorrencia"
+                          >
+                            x
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1674,9 +1733,11 @@ export default function App() {
       </Modal>
 
       {/* Evaluation Modal */}
+
       <Modal isOpen={isEvaluationOpen} onClose={() => setIsEvaluationOpen(false)} title="AVALIAÇÃO MENSAL">
-        <div className="flex flex-col gap-4 text-xs max-h-[60vh] overflow-auto">
+
           <p className="text-gray-400 mb-2">Analise o desempenho e ajuste os níveis (máx 1 nível de subida por mês).</p>
+        <div className="flex flex-col gap-4 text-xs max-h-[60vh] overflow-auto">
           {employees.map(emp => (
             <div key={emp.id} className="bg-black p-3 border border-gray-700 flex justify-between items-center">
               <div>
@@ -1695,6 +1756,7 @@ export default function App() {
           </button>
         </div>
       </Modal>
+
 
       {/* Stats Modal */}
       <Modal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} title="STATUS DA EQUIPE">
@@ -1718,39 +1780,6 @@ export default function App() {
 
 
 
-      {/* Boss Panel Modal */}
-      <Modal isOpen={isBossPanelOpen} onClose={() => setIsBossPanelOpen(false)} title="PAINEL DO CHEFE">
-        <div className="flex flex-col gap-4 text-xs max-h-[60vh] overflow-auto">
-          <p className="text-gray-400 mb-2">Vincule contas de usuários aos membros da equipe para que eles possam personalizar suas próprias mesas e skins.</p>
-          
-          <div className="grid gap-3">
-            {employees.map(emp => (
-              <div key={emp.id} className="bg-black p-3 border border-gray-700 flex flex-col gap-2">
-                <div className="flex justify-between items-center">
-                  <p className="text-white font-bold text-sm">{emp.name}</p>
-                  <p className="text-gray-500">{emp.team}</p>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <label className="text-gray-400">Vincular a:</label>
-                  <select 
-                    className="flex-1 bg-gray-900 border border-gray-600 p-1 text-white outline-none"
-                    value={emp.linkedUserId || ""}
-                    onChange={(e) => updateEmployee({ ...emp, linkedUserId: e.target.value || undefined })}
-                  >
-                    <option value="">Nenhum usuário</option>
-                    {usersList.map(user => (
-                      <option key={user.uid} value={user.uid}>
-                        {user.name} ({user.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Modal>
 
       {clickedEmptySeat !== null && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
@@ -1976,6 +2005,18 @@ export default function App() {
         />
       )}
 
+      {isHomeOfficeApprovalOpen && (
+        <HomeOfficeApprovalPanel
+          isOpen={isHomeOfficeApprovalOpen}
+          employees={employees}
+          onApprove={approvePendingHomeOfficeDate}
+          onClose={() => setIsHomeOfficeApprovalOpen(false)}
+          onReject={rejectPendingHomeOfficeDate}
+        />
+      )}
+
     </div>
   );
 }
+
+
