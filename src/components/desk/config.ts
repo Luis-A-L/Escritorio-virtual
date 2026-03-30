@@ -108,11 +108,7 @@ export const VARIANT_CHARACTER_STYLE: Record<DeskVariant, CSSProperties> = {
 };
 
 export function getDeskTone(style?: HardwareStyle, isBoss?: boolean): DeskTone {
-  if (isBoss) {
-    return {
-      surface: 'bg-[#1a1a1a] border-[#090909] shadow-[0_22px_32px_rgba(0,0,0,0.28)]',
-    };
-  }
+  // Allow boss to have custom styles, removed hardcoded early return
 
   switch (style) {
     case 'gamer':
@@ -131,14 +127,7 @@ export function getDeskTone(style?: HardwareStyle, isBoss?: boolean): DeskTone {
 }
 
 export function getMonitorTone(style?: HardwareStyle, isBoss?: boolean): MonitorTone {
-  if (isBoss) {
-    return {
-      shell: 'border-[#7e7e7e] bg-[#c2c6cb]',
-      screen: 'bg-gradient-to-b from-slate-200/20 to-[#000080]/85',
-      stem: 'bg-gray-500',
-      base: 'bg-gray-600',
-    };
-  }
+  // Allow boss to have custom styles, removed hardcoded early return
 
   switch (style) {
     case 'gamer':
@@ -166,13 +155,7 @@ export function getMonitorTone(style?: HardwareStyle, isBoss?: boolean): Monitor
 }
 
 export function getMouseTone(style?: HardwareStyle, isBoss?: boolean): MouseTone {
-  if (isBoss) {
-    return {
-      shell: 'border-[#7d7d7d] bg-[#e2e8f0]',
-      wheel: 'bg-slate-500',
-      wire: 'bg-slate-400',
-    };
-  }
+  // Allow boss to have custom styles, removed hardcoded early return
 
   switch (style) {
     case 'gamer':
@@ -196,12 +179,7 @@ export function getMouseTone(style?: HardwareStyle, isBoss?: boolean): MouseTone
 }
 
 export function getKeyboardTone(style?: HardwareStyle, fallbackStyle?: HardwareStyle, isBoss?: boolean): KeyboardTone {
-  if (isBoss) {
-    return {
-      shell: 'border-[#7d7d7d] bg-[#e2e8f0]',
-      keys: 'bg-slate-500',
-    };
-  }
+  // Allow boss to have custom styles, removed hardcoded early return
 
   switch (resolveStyle(style, fallbackStyle)) {
     case 'gamer':
