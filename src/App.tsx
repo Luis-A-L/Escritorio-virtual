@@ -273,10 +273,16 @@ export default function App() {
                          alert(`Esta data já possui ${othersApproved} pessoas aprovadas e não pode ser agendada.`);
                          return;
                        }
-                       updateEmployee({ 
-                         ...targetEmployee, 
-                         pendingHomeOfficeDates: [...(targetEmployee.pendingHomeOfficeDates || []), dateStr]
-                       });
+                        setConfirmDialog({
+                          title: 'Confirmar Solicitação',
+                          message: `Deseja realmente solicitar o dia ${dateStr} para Home Office? A solicitação ficará pendente de aprovação.`,
+                          onConfirm: () => {
+                            updateEmployee({ 
+                              ...targetEmployee, 
+                              pendingHomeOfficeDates: [...(targetEmployee.pendingHomeOfficeDates || []), dateStr]
+                            });
+                          }
+                        });
                      }
                   }
                 }}
