@@ -53,7 +53,7 @@ export default function Character({ employee, size = 'md' }: CharacterProps) {
 
   if (employee.customImageUrl) {
     return (
-      <div className={`relative flex flex-col items-center justify-end ${animationClass} ${opacityClass} ${containerHeight[size]} scale-105 origin-bottom`}>
+      <div className={`relative flex flex-col items-center justify-end ${animationClass} ${opacityClass} ${containerHeight[size]} scale-105 origin-bottom select-none`} draggable={false}>
         {employee.status === 'remote' && (
           <div className="absolute -top-4 text-xs z-20" title="Home Office">🏠</div>
         )}
@@ -61,9 +61,10 @@ export default function Character({ employee, size = 'md' }: CharacterProps) {
           <div className="absolute -top-4 text-xs z-20" title="Férias">🏖️</div>
         )}
         <img 
+          draggable={false}
           src={employee.customImageUrl} 
           alt={employee.name} 
-          className={`w-auto h-auto ${customImageMaxWidth[size]} max-h-full object-contain z-10 drop-shadow-md`}
+          className={`w-auto h-auto ${customImageMaxWidth[size]} max-h-full object-contain z-10 drop-shadow-md select-none pointer-events-none`}
           style={{ imageRendering: 'pixelated' }}
         />
       </div>
@@ -71,7 +72,7 @@ export default function Character({ employee, size = 'md' }: CharacterProps) {
   }
 
   return (
-    <div className={`relative flex flex-col items-center ${animationClass} ${opacityClass} scale-105 origin-bottom`}>
+    <div className={`relative flex flex-col items-center ${animationClass} ${opacityClass} scale-105 origin-bottom select-none`} draggable={false}>
       {employee.status === 'remote' && (
         <div className="absolute -top-4 text-xs z-20 transition-transform" title="Home Office">🏠</div>
       )}

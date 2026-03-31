@@ -1,6 +1,5 @@
 import React from 'react';
 import { Employee, DeskSlot } from '../../types';
-import { DeskVariant } from '../../types';
 import { VARIANT_MONITOR_STYLE, getMonitorTone } from './config';
 
 interface DeskMonitorProps {
@@ -11,10 +10,10 @@ interface DeskMonitorProps {
 
 export default function DeskMonitor({ deskSlot, employee, isSelected = false }: DeskMonitorProps) {
   const { variant, isBoss = false } = deskSlot;
-  const monitorTone = getMonitorTone(employee, isBoss);
   const monitorOffset = deskSlot.monitorOffset || employee?.monitorOffset;
   const monitorColor = deskSlot.monitorColor || employee?.monitorColor;
   const monitorStyle = deskSlot.monitorStyle || employee?.monitorStyle;
+  const monitorTone = getMonitorTone(monitorStyle, isBoss);
 
   const isGamer = monitorStyle === 'gamer' && !isBoss;
   const isMedium = monitorStyle === 'medium' && !isBoss;

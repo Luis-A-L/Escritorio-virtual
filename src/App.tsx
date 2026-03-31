@@ -124,6 +124,7 @@ export default function App() {
   const [layoutHistory, setLayoutHistory] = useState<LayoutState[]>([]);
   const stateRef = useRef({ deskSlots: [] as DeskSlot[], employees: [] as Employee[] });
   const dragStartedRef = useRef(false);
+  const dragRef = useRef({ target: null as LayoutItemReference | null, startInfo: { mouseX: 0, mouseY: 0 }, startPositions: new Map<string, {initialX: number, initialY: number}>(), selectedItems: [] as LayoutItemReference[] });
 
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isHomeOfficeApprovalOpen, setIsHomeOfficeApprovalOpen] = useState(false);
@@ -504,22 +505,23 @@ export default function App() {
 
   useEffect(() => {
     const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (isLayoutEditMode && dragTarget !== null) {
+      const { target, startInfo, startPositions, selectedItems } = dragRef.current;
+      if (isLayoutEditMode && target !== null) {
         if (!dragStartedRef.current) {
           saveHistoryState();
           dragStartedRef.current = true;
         }
 
-        const dx = (e.clientX - dragStartInfo.mouseX) / zoom;
-        const dy = (e.clientY - dragStartInfo.mouseY) / zoom;
+        const dx = (e.clientX - startInfo.mouseX) / zoom;
+        const dy = (e.clientY - startInfo.mouseY) / zoom;
         
         const snap = 5;
         const guides: {type: 'h'|'v', pos: number}[] = [];
 
         setDeskSlots(prev => {
           let updated = [...prev];
-          selectedLayoutItems.forEach(item => {
-            const startPos = dragStartPositions.get(`${item.type}-${item.id}`);
+          selectedItems.forEach(item => {
+            const startPos = startPositions.get(`${item.type}-${item.id}`);
             if (startPos) {
               const newX = startPos.initialX + dx;
               const newY = startPos.initialY + dy;
@@ -555,6 +557,7 @@ export default function App() {
               }
             }
           });
+          stateRef.current.deskSlots = updated;
           return updated;
         });
 
@@ -562,14 +565,15 @@ export default function App() {
 
         setEmployees(prev => {
           let updated = [...prev];
-          selectedLayoutItems.filter(i => i.type === 'character').forEach(item => {
-             const startPos = dragStartPositions.get(`character-${item.id}`);
+          selectedItems.filter(i => i.type === 'character').forEach(item => {
+             const startPos = startPositions.get(`character-${item.id}`);
              if (startPos) {
                const newX = startPos.initialX + dx;
                const newY = startPos.initialY + dy;
                updated = updated.map(emp => emp.id === item.id ? { ...emp, characterOffset: { ...(emp.characterOffset || {}), x: newX, y: newY } } : emp);
              }
           });
+          stateRef.current.employees = updated;
           return updated;
         });
       }
@@ -577,12 +581,13 @@ export default function App() {
 
     const handleGlobalMouseUp = async () => {
       setAlignmentGuides([]);
-      if (dragTarget !== null) {
+      const { target, selectedItems } = dragRef.current;
+      if (target !== null) {
         // Sync final position to Supabase for all selected items
         const desksToUpsert: DeskSlot[] = [];
         const empsToUpsert: Employee[] = [];
 
-        for (const item of selectedLayoutItems) {
+        for (const item of selectedItems) {
           if (item.type === 'desk') {
             const desk = stateRef.current.deskSlots.find(d => d.seatNumber === item.id);
             if (desk && !desksToUpsert.some(d => d.seatNumber === desk.seatNumber)) desksToUpsert.push(desk);
@@ -608,6 +613,7 @@ export default function App() {
         }
 
         setDragTarget(null);
+        dragRef.current.target = null;
         dragStartedRef.current = false;
       }
     };
@@ -639,7 +645,7 @@ export default function App() {
       window.removeEventListener('mouseup', handleGlobalMouseUp);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isLayoutEditMode, dragTarget, dragStartInfo, zoom, selectedLayoutItems, dragStartPositions]);
+  }, [isLayoutEditMode, zoom]);
 
   useEffect(() => {
     // Bypass auth
@@ -1144,7 +1150,7 @@ export default function App() {
 
 
           <div className="relative z-10 mx-auto mt-20" style={{ width: `${WORKSPACE_WIDTH * zoom}px`, height: `${WORKSPACE_HEIGHT * zoom}px` }}>
-            <div className={`absolute left-0 top-0 origin-top-left ${isLayoutEditMode ? 'pointer-events-auto' : ''}`} style={{ width: `${WORKSPACE_WIDTH}px`, height: `${WORKSPACE_HEIGHT}px`, transform: `scale(${zoom})` }}>
+            <div className={`absolute left-0 top-0 origin-top-left select-none ${isLayoutEditMode ? 'pointer-events-auto' : ''}`} style={{ width: `${WORKSPACE_WIDTH}px`, height: `${WORKSPACE_HEIGHT}px`, transform: `scale(${zoom})` }}>
               {deskSlots.map(slot => {
                 const employee = slot.isBoss ? undefined : employeesBySeat.get(slot.seatNumber);
 
@@ -1182,6 +1188,7 @@ export default function App() {
                              });
                            }
                         });
+                        stateRef.current.deskSlots = updated;
                         return updated;
                       });
                       setEmployees(prev => {
@@ -1195,6 +1202,7 @@ export default function App() {
                              return emp;
                            });
                         });
+                        stateRef.current.employees = updated;
                         return updated;
                       });
                     }
@@ -1251,6 +1259,7 @@ export default function App() {
                     setDragStartInfo({ mouseX: e.clientX, mouseY: e.clientY });
                     setSelectedLayoutItems(newSelection);
                     setDragTarget(clickedItem);
+                    dragRef.current = { target: clickedItem, startInfo: { mouseX: e.clientX, mouseY: e.clientY }, startPositions: positions, selectedItems: newSelection };
                     dragStartedRef.current = false;
                   }
                 };
@@ -1258,7 +1267,6 @@ export default function App() {
                 const handleClick = () => {
                   if (hasDragged) return;
                   if (isLayoutEditMode) {
-                    setSelectedDeskSlotToEdit(slot);
                     return;
                   }
                   if (employee) {
@@ -1347,7 +1355,17 @@ export default function App() {
           {userProfile?.role === 'admin' && (
             <>
               <button 
-                onClick={() => setIsLayoutEditMode(!isLayoutEditMode)} 
+                onClick={async () => {
+                  if (isLayoutEditMode) {
+                    const toSaveEmps = employees.map(prepareEmployeeForSupabase);
+                    const { error: empErr } = await supabase.from('employees').upsert(toSaveEmps);
+                    if (empErr) alert(`Erro ao salvar membros: ${empErr.message}`);
+
+                    const { error: deskErr } = await supabase.from('desk_slots').upsert(deskSlots);
+                    if (deskErr) alert(`Erro ao salvar mesas: ${deskErr.message}`);
+                  }
+                  setIsLayoutEditMode(!isLayoutEditMode);
+                }} 
                 className={`border px-2 py-1 text-[8px] md:text-[10px] transition-colors ${
                   isLayoutEditMode 
                   ? 'bg-[#ff00ff] border-[#ff00ff] text-white hover:bg-[#cc00cc]' 
@@ -1571,16 +1589,16 @@ export default function App() {
                     <option value="" disabled>Selecione um erro...</option>
                     {ERROR_TYPES.map(err => <option key={err} value={err}>{err}</option>)}
                   </select>
-                  <div className="flex-1 overflow-auto max-h-24 mt-2 border-t border-gray-800 pt-2">
-                    <p className="text-gray-500 mb-1">Erros este mês: {selectedEmployee.errors?.length || 0}</p>
+                  <div className="flex-1 overflow-y-auto max-h-64 mt-2 border-t border-gray-800 pt-2 pr-1">
+                    <p className="text-gray-500 mb-2">Erros este mês: {selectedEmployee.errors?.length || 0}</p>
                     {selectedEmployee.errors?.map(err => (
-                      <div key={err.id} className="flex items-center justify-between text-[10px] text-red-400 mb-1 gap-2">
-                        <span>- {err.type} ({err.date})</span>
+                      <div key={err.id} className="flex items-start justify-between text-[10px] text-red-400 mb-2 gap-2">
+                        <span className="leading-tight">- {err.type} ({err.date})</span>
                         {userProfile?.role === 'admin' && (
                           <button
                             onClick={() => updateEmployee({ ...selectedEmployee, errors: selectedEmployee.errors?.filter(e => e.id !== err.id) })}
-                            className="text-red-600 hover:text-red-400 shrink-0 font-bold"
-                            title="Remover ocorrencia"
+                            className="text-red-600 hover:text-red-400 shrink-0 font-bold px-1"
+                            title="Remover ocorrência"
                           >
                             x
                           </button>

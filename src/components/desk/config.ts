@@ -113,15 +113,15 @@ export function getDeskTone(style?: HardwareStyle, isBoss?: boolean): DeskTone {
   switch (style) {
     case 'gamer':
       return {
-        surface: 'bg-black border-red-500 shadow-[0_0_18px_rgba(239,68,68,0.35)]',
+        surface: 'bg-black desk-style-gamer',
       };
     case 'medium':
       return {
-        surface: 'bg-[#22170f] border-[#120b07] shadow-[0_12px_24px_rgba(0,0,0,0.25)]',
+        surface: 'bg-[#22170f] desk-style-medium',
       };
     default:
       return {
-        surface: 'bg-[#111111] border-[#050505] shadow-[0_12px_24px_rgba(0,0,0,0.22)]',
+        surface: 'bg-[#111111] desk-style-simple',
       };
   }
 }

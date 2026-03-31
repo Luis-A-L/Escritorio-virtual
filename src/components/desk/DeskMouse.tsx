@@ -10,10 +10,10 @@ interface DeskMouseProps {
 
 export default function DeskMouse({ deskSlot, employee, isSelected = false }: DeskMouseProps) {
   const { variant, isBoss = false } = deskSlot;
-  const mouseTone = getMouseTone(employee, isBoss);
   const mouseOffset = deskSlot.mouseOffset || employee?.mouseOffset;
   const mouseColor = deskSlot.mouseColor || employee?.mouseColor;
   const mouseStyle = deskSlot.mouseStyle || employee?.mouseStyle;
+  const mouseTone = getMouseTone(mouseStyle, isBoss);
 
   const isGamer = mouseStyle === 'gamer' && !isBoss;
   const isMedium = mouseStyle === 'medium' && !isBoss;
